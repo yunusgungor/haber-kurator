@@ -207,7 +207,7 @@ haber-kurator/
 │   └── pillars.md
 ├── voice/
 │   ├── voice-profile.md        ← Haber odaklı üslup kuralları
-│   └── master-avoid-slop.md    ← 54+ slop kalıbı
+│   └── master-avoid-slop.md    ← 122 slop kalıbı (4 seviye)
 ├── runs/active/{slug}/
 │   ├── haber-object.md         ← State, route, verification level
 │   ├── fact-check-report.md    ← Cross-verification raporu

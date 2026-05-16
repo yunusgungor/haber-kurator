@@ -15,7 +15,7 @@ Key Features:
 • Fact-check pipeline before any draft is written
 • Correction workflow for post-publication errors
 • 8-state news lifecycle
-• 65+ slop patterns across 4 severity tiers
+• 122 slop patterns across 4 severity tiers
 • Cross-language clustering (English/Turkish)
 """
 
@@ -1007,7 +1007,12 @@ class HaberKuratorCore:
         """Load state cache from SQLite.
         
         Also migrates legacy JSON cache if present.
+        Disabled when cache_enabled config is False.
         """
+        if not CONFIG.get("cache_enabled", True):
+            logger.info("State cache disabled by config")
+            return
+
         # Migration: check for legacy JSON cache
         legacy_path = self._state_cache_dir / "runs_state.json"
         if legacy_path.exists():
@@ -2196,6 +2201,7 @@ class HaberKuratorCore:
                                   "Republish corrected version"],
             "corrected":         ["Correction published. Archive if done: /haber archive"],
             "retracted":         ["Story retracted. Archive: /haber archive"],
+            "archived":          ["Run archived. Review if needed: /haber audit"],
         }
         return guide.get(state, ["No specific next actions for this state."])
 
@@ -2354,8 +2360,10 @@ Return ONLY the markdown brief. No extra commentary."""
 
             brief_path = run_path / "brief.md"
             brief_path.write_text(text, encoding="utf-8")
-            # Brief hazırlandıktan sonra cross_verified state'ine geç (brief_ready artık yok)
-            self.update_state(slug, "cross_verified")
+            # Brief hazırlandı — state zaten cross_verified ise koru, değilse geç
+            current = self.get_state(slug)
+            if current not in ("cross_verified", "published", "correction_needed"):
+                self.update_state(slug, "cross_verified")
 
             return {"slug": slug, "status": "cross_verified", "length": len(text)}
 
@@ -2541,8 +2549,7 @@ QUALITY GATES:
 
             draft_path = run_path / "draft-package.md"
             draft_path.write_text(text, encoding="utf-8")
-            self.update_state(slug, "drafting")
-
+            # Draft hazırlandı — state cross_verified olarak kalır
             return {"slug": slug, "status": "drafted", "length": len(text)}
 
         except Exception as e:

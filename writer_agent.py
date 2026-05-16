@@ -239,14 +239,19 @@ Turkish:"""
             "MEMOS_API_URL",
             "https://memos.googig.cloud/api/v1/memos"
         )
-        
+
         if not token:
             _logger = logging.getLogger(__name__)
             _logger.warning("❌ MEMOS_TOKEN not configured")
             return False
 
+        # Append tags to content if provided (consistent with memos_cli.py)
+        full_content = content
+        if tags:
+            full_content = f"{content}\n\n{tags}"
+
         payload = json.dumps({
-            "content": content,
+            "content": full_content,
             "visibility": "PUBLIC"
         }).encode("utf-8")
 

@@ -169,6 +169,9 @@ def register_cli(haber_parser, core: HaberKuratorCore):
             error = " ".join(args.error)
             retract = args.retract
             info = getattr(args, "info", "")
+            if not retract and not info.strip():
+                console.print("[red]❌ --info <correct_information> is required for corrections (not retractions). Use --retract to retract instead.[/red]")
+                return
             result = core.issue_correction(slug, error, info, retract)
             console.print(Panel(result, title="Correction Notice", border_style="yellow"))
 

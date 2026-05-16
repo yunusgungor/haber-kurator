@@ -114,10 +114,11 @@ def register(ctx: Any) -> None:
             "properties": {
                 "category": {
                     "type": "string",
-                    "enum": ["sources", "source_summary", "strategy", "voice", "run", "stores"],
+                    "enum": ["sources", "source_summary", "strategy", "voice", "run", "stores", "learnings"],
                     "description": "Knowledge category to retrieve",
                 },
                 "slug": {"type": "string", "description": "Slug for run category"},
+                "topic": {"type": "string", "description": "Topic filter for learnings"},
             },
             "required": ["category"],
         },
