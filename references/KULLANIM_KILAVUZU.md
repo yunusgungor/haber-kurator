@@ -1309,6 +1309,25 @@ Tüm CLI komutlarının `/haber` karşılığı vardır:
 - `/haber status` — status
 - `/haber sources` — sources
 
+### 15.7 Doğal Dil Desteği (NLP)
+
+Hermes içinde `/haber` komutuna **Türkçe doğal dil cümleleri** yazabilirsiniz.
+Sistem kelimelerden niyeti ve kategoriyi otomatik algılar:
+
+| Dediğiniz | Ne Yapar |
+|-----------|----------|
+| `/haber teknoloji haberlerini getir` | `fetch --category technology` |
+| `/haber ekonomi haberlerini doğrula` | `verify --category business` |
+| `/haber son dakika haberlerini yayınla` | `publish --category news` |
+| `/haber bilim haberlerini otomatik yayınla` | `auto-publish --category science` |
+| `/haber kaynakları listele` | `sources` |
+| `/haber haber doğrula` | `verify` (tüm kategoriler) |
+| `/haber haber yayınla` | `publish` (tüm kategoriler) |
+| `/haber getir` | `fetch` (tüm kategoriler) |
+
+**Desteklenen kategoriler:** teknoloji, ekonomi/finans, bilim/araştırma, gündem, son dakika
+**Desteklenen fiiller:** getir/çek/ara (fetch), doğrula/kontrol et/teyit et (verify), yayınla/paylaş/gönder (publish), otomatik yayınla (auto-publish)
+
 ---
 
 ## 16. Adım Adım Örnek Senaryo
@@ -1349,8 +1368,8 @@ hermes haber state 2026-05-technology-slug --set feedback_24h
 hermes haber state 2026-05-technology-slug --set feedback_72h
 hermes haber state 2026-05-technology-slug --set learned
 
-# ── 11. Arşivle ───────────────────────────────────────
-hermes haber archive 2026-05-technology-slug
+# ── 11. Arşivle (state learned değilse --force ile) ──
+hermes haber archive 2026-05-technology-slug --force
 ```
 
 ### Otomatik Pipeline (Tek Komut)
@@ -1375,7 +1394,13 @@ hermes plugins disable haber-kurator
 
 ### ❓ "invalid choice: 'haber'" hatası
 
-Plugin CLI komutları kayıtlı değil. Nedeni: `__init__.py`'deki absolute import'lar (`from haber_kurator_core import...`) Hermes namespace paketinde çalışmaz. Çözüm: relative import (`from .haber_kurator_core import...`).
+Plugin CLI komutları kayıtlı değil. İki olası neden:
+
+1. **Absolute import hatası:** `__init__.py`'deki `from haber_kurator_core import...` gibi import'lar Hermes namespace paketinde çalışmaz. Çözüm: `from .haber_kurator_core import...` (relative import).
+
+2. **Handler bağlantısı eksik:** `cli.py`'deki `register_cli()` fonksiyonu argparse ağacını kurar ama `haber_parser.set_defaults(func=handler)` çağrılmazsa komut işlenemez. Çözüm: `register_cli()` sonunda `haber_parser.set_defaults(func=handler)` eklenir.
+
+Emin değilseniz: `hermes plugins list` ile plugin'in etkin olduğunu kontrol edin, sonra `hermes haber sources` ile test edin.
 
 ### ❓ RSS beslemesi çalışmazsa?
 

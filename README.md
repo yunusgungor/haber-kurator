@@ -98,14 +98,14 @@ Sözcü       ─┤  │  cross_   │                     │
 | `new <idea> [--source]` | 🆕 Yeni run oluştur |
 | `route <idea> [--source]` | 🗺️ Rota belirle |
 | `state [slug] [--set]` | 🔁 State gör/güncelle |
-| `brief <slug>` | 📝 Brief hazırla |
-| `draft <slug>` | ✍️ Draft hazırla |
-| `verify-draft <slug>` | 🔍 Draft'ı doğrula |
+| `brief <slug> [--llm]` | 📝 Brief hazırla (--llm ile otomatik) |
+| `draft <slug> [--llm]` | ✍️ Draft hazırla (--llm ile otomatik) |
+| `verify-draft <slug>` | 🔍 Draft'ı doğrula (slop + halüsinasyon) |
 | `signal [x|rss]` | 📶 Sinyal tara |
 | `postmortem <slug>` | 📊 Yayın analizi |
 | `learnings [--topic]` | 📝 Öğrenimler |
 | `patterns` | 📊 Pattern analizi |
-| `archive <slug>` | 📦 Run'ı arşivle |
+| `archive <slug> [--force]` | 📦 Run'ı arşivle (--force ile state atla) |
 | `context <slug>` | 📄 Run bağlamını göster |
 | `voice-update` | 🗣️ Üslup profilini göster |
 | `setup` | 🚀 Dizin yapısını oluştur |
@@ -138,10 +138,26 @@ Sözcü       ─┤  │  cross_   │                     │
 | `postmortem <slug>` | 📊 Yayın analizi |
 | `context <slug>` | 📄 Run bağlamı |
 | `setup` | 🚀 İlk kurulum |
-| `archive <slug>` | 📦 Arşivle |
+| `archive <slug> [--force]` | 📦 Arşivle (--force ile state atla) |
 | `learnings` | 📝 Öğrenimler |
 | `patterns` | 📊 Pattern analizi |
 | `voice-update` | 🗣️ Ses profilini görüntüle |
+
+### Doğal Dil Desteği
+
+Hermes içinde `/haber` komutuna **Türkçe cümle** yazabilirsiniz. Sistem otomatik anlar:
+
+| Dediğiniz | Ne Yapar |
+|-----------|----------|
+| `/haber teknoloji haberlerini getir` | `fetch --category technology` |
+| `/haber ekonomi haberlerini doğrula` | `verify --category business` |
+| `/haber son dakika haberlerini yayınla` | `publish --category news` |
+| `/haber bilim haberlerini otomatik yayınla` | `auto-publish --category science` |
+| `/haber kaynakları listele` | `sources` |
+| `/haber haber doğrula` | `verify` |
+
+Kategori: teknoloji, ekonomi/finans, bilim/araştırma, gündem, son dakika, haber
+Fiil: getir/ara (fetch), doğrula/kontrol et (verify), yayınla/paylaş (publish)
 
 ---
 
@@ -161,7 +177,7 @@ haber-kurator/
 │   └── pillars.md           📚 İçerik konuları (sen doldur)
 ├── voice/
 │   ├── voice-profile.md     🗣️ Üslup kuralları
-│   └── master-avoid-slop.md 🚫 122 slop pattern
+│   └── master-avoid-slop.md 🚫 111 slop pattern
 ├── runs/active/             📂 Aktif haber run'ları
 ├── runs/archive/            📦 Arşivlenmiş run'lar
 ├── stores/                  📥 Fikir, kanıt, hook depoları
@@ -206,9 +222,9 @@ hermes cron create --schedule "0 */2 * * *" \
 
 ## 🛡️ Kalite Kontrolleri
 
-- **122 slop pattern** (T1:45, T2:32, T3:31, Bonus:14) — AI kokusu tespiti
-- **Halüsinasyon taraması** — Kaynaksız istatistik, uydurma alıntı, spekülasyon
-- **Türkçe/İngilizce destek** — Her iki dilde kaynak adı tanıma, alıntı atfı
+- **111 slop pattern** (T1:45, T2:33, T3:19, Bonus:14) — AI kokusu tespiti
+- **Halüsinasyon taraması** — Kaynaksız istatistik, uydurma alıntı, spekülasyon (URL'lerdeki sayılar false positive olarak algılanmaz)
+- **Türkçe/İngilizce çapraz dil** — 50+ eşleştirme kuralı ile kümeleme
 - **19 state'li lifecycle** — Her haberin durumu takip edilir
 - **Düzeltme workflow'u** — Hatalı haber için correction/retraction
 
