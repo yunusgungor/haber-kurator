@@ -11,3 +11,6 @@
 - **Title:** The Week: How did Labour get here and where do they go now?
 - **Verification Level:** 2
 - **Verified Sources:** 7
+
+state: cross_verified
+updated: 2026-05-17T00:02:29.672747

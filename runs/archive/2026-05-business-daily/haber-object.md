@@ -11,3 +11,6 @@
 - **Title:** Business Daily
 - **Verification Level:** 2
 - **Verified Sources:** 5
+
+state: archived
+updated: 2026-05-17T00:02:29.687428

@@ -234,6 +234,7 @@ Turkish:"""
 
     def post_to_memos(self, content: str, tags: str = "") -> bool:
         """Post content to Memos platform via v1 API."""
+        _logger = logging.getLogger(__name__)
         token = os.environ.get("MEMOS_TOKEN", "")
         api_url = os.environ.get(
             "MEMOS_API_URL",
@@ -241,7 +242,6 @@ Turkish:"""
         )
 
         if not token:
-            _logger = logging.getLogger(__name__)
             _logger.warning("❌ MEMOS_TOKEN not configured")
             return False
 

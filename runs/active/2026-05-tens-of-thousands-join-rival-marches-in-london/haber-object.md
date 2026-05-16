@@ -11,3 +11,6 @@
 - **Title:** Tens of thousands join rival marches in London
 - **Verification Level:** 2
 - **Verified Sources:** 5
+
+state: cross_verified
+updated: 2026-05-17T00:02:29.677308

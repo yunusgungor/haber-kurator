@@ -11,3 +11,6 @@
 - **Title:** BBC News app
 - **Verification Level:** 2
 - **Verified Sources:** 7
+
+state: cross_verified
+updated: 2026-05-17T00:02:29.665396

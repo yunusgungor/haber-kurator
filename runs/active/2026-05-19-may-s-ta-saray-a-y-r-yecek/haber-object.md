@@ -11,3 +11,6 @@
 - **Title:** 19 Mayıs'ta Saray'a yürüyecek!
 - **Verification Level:** 0
 - **Verified Sources:** 1
+
+state: cross_verified
+updated: 2026-05-17T00:02:29.670524

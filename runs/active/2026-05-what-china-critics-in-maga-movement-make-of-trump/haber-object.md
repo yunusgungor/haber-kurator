@@ -11,3 +11,6 @@
 - **Title:** What China critics in Maga movement make of Trump's Beijing trip
 - **Verification Level:** 2
 - **Verified Sources:** 5
+
+state: cross_verified
+updated: 2026-05-17T00:02:29.668329

@@ -3680,8 +3680,9 @@ Return as markdown:
     def archive_run(self, slug: str, force: bool = False) -> str:
         """Move a run from active to archive."""
         state = self.get_state(slug)
-        if state != "learned" and not force:
-            return f"❌ Cannot archive {slug} (state: {state}). Must be 'learned' first."
+        valid_pre_archive = [t for s, targets in STATE_TRANSITIONS.items() if "archived" in targets for t in [s]]
+        if state not in valid_pre_archive and not force:
+            return f"❌ Cannot archive {slug} (state: {state}). Must be one of: {', '.join(valid_pre_archive)} or use --force."
 
         src = self.active_runs / slug
         if not src.exists():
