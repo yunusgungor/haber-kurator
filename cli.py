@@ -19,8 +19,142 @@ from .haber_kurator_core import HaberKuratorCore
 console = Console()
 
 
+def handle_nlp(text: str, core) -> str:
+    """NLP doğal dil işleme — Türkçe cümlelerden niyet ve kategori çıkarır.
+    
+    Örnekler:
+      "teknoloji haberlerini getir"  → fetch technology
+      "ekonomi haberlerini doğrula"  → verify business
+      "son dakika haberlerini yayınla" → publish news
+      "bilim haberlerini otomatik yayınla" → auto-publish science
+      "kaynakları listele"            → sources
+    
+    Returns:
+        str: İşlem sonucu metni veya None (NLP eşleşmezse)
+    """
+    _full_lower = text.strip().lower()
+    _re = __import__("re")
+
+    # Türkçe → İngilizce kategori eşleme (özgül olan önce)
+    _cat = None
+    for _pattern, _en_cat in [
+        (r'teknoloji', "technology"), (r'\btech\b', "technology"),
+        (r'\bekonomi\b', "business"), (r'\bfinans\b', "business"), (r'\bpiyasa\b', "business"),
+        (r'\bbilim\b', "science"), (r'\baraştırma\b', "science"), (r'\bscience\b', "science"),
+        (r'\bgündem\b', "news"),
+    ]:
+        if _re.search(_pattern, _full_lower):
+            _cat = _en_cat
+            break
+    if _cat is None and "haber" in _full_lower:
+        _cat = "news"
+    if "son dakika" in _full_lower:
+        _cat = "news"
+
+    # Niyet tespiti
+    _has_fetch = bool(_re.search(r'\b(getir|çek|fetch|ara|bul|indir)\b', _full_lower))
+    _has_verify = bool(_re.search(r'\b(doğrula|verify|kontrol|teyit|onayla|incele|doğrulama)\b', _full_lower))
+    _has_publish = bool(_re.search(r'\b(yayınla|publish|paylaş|gönder|post|bas)\b', _full_lower))
+    _has_auto = bool(_re.search(r'\b(otomatik|auto|full|tüm|tam)\b', _full_lower))
+    _has_sources = "kaynak" in _full_lower or bool(_re.search(r'\bsources\b', _full_lower))
+    _has_verify_only = _has_verify and not _has_fetch and not _has_publish
+
+    # Kaynak listesi
+    if _has_sources and not _has_fetch and not _has_verify:
+        return core.get_source_summary()
+
+    # Otomatik yayın
+    if _has_auto and _has_publish:
+        try:
+            from .writer_agent import WriterAgent
+            agent = WriterAgent(core)
+            try:
+                from agent.auxiliary_client import async_call_llm
+                agent.set_llm(True)
+            except ImportError:
+                pass
+            results = agent.auto_publish(max_articles=5, category=_cat)
+            lines = [f"### 🤖 Writer Agent — {results['published']} haber yayınlandı", ""]
+            for a in results.get("articles", []):
+                badge = "✅" if a.get("level") == "CONFIRMED" else "🟡"
+                lines.append(f"{badge} **{a.get('title', '?')[:80]}**")
+            if results.get("skipped", 0) > 0:
+                lines.append(f"\n⏭️ {results['skipped']} haber atlandı")
+            if results.get("failed", 0) > 0:
+                lines.append(f"\n❌ {results['failed']} haber başarısız")
+            return "\n".join(lines)
+        except Exception as e:
+            return f"❌ Otomatik yayın hatası: {str(e)[:80]}"
+
+    # Sadece doğrulama
+    if _has_verify_only:
+        items = core.fetch_all_news(_cat)
+        clusters = core.cluster_stories(items)
+        top = sorted(clusters, key=lambda c: c["source_count"], reverse=True)[:10]
+        lines = [f"🔍 Cross-Verification Results ({len(clusters)} clusters)", ""]
+        for c in top:
+            ver = core.cross_verify_story(c)
+            badge = "✅" if ver.is_safe_to_publish else "⚠️"
+            lines.append(f"{badge} {c['story_title'][:80]}")
+            lines.append(f"   Level: {ver.verification_level.label}")
+            lines.append(f"   Sources: {ver.sources_checked}")
+            lines.append("")
+        return "\n".join(lines)
+
+    # Yayınla
+    if _has_publish:
+        items = core.fetch_all_news(_cat)
+        clusters = core.cluster_stories(items)
+        results_list = []
+        for c in sorted(clusters, key=lambda x: x["source_count"], reverse=True)[:5]:
+            results_list.append(core.publish_verified_news(c, human_review=not _has_auto))
+        lines = [f"📰 Publish Results ({len(results_list)} stories)", ""]
+        for r in results_list:
+            status_icon = "✅" if r.get("status") != "exists" else "⏭️"
+            lines.append(f"{status_icon} {r.get('slug', '?')} — {r.get('route', '?')}")
+        return "\n".join(lines)
+
+    # Varsayılan: fetch
+    items = core.fetch_all_news(_cat)
+    clusters = core.cluster_stories(items)
+    top = sorted(clusters, key=lambda c: c["source_count"], reverse=True)[:10]
+    lines = [f"📡 News Fetched ({len(items)} items, {len(clusters)} clusters)", ""]
+    for i, c in enumerate(top, 1):
+        tiers = c["tier_count"]
+        tier_badges = f"T0:{tiers.get('primary',0)} T1:{tiers.get('major',0)}"
+        lines.append(f"{i}. **{c['story_title'][:90]}**")
+        lines.append(f"   Sources: {c['source_count']} | {tier_badges}")
+        lines.append(f"   URL: {c.get('best_url', 'N/A')}")
+        lines.append("")
+    return "\n".join(lines)
+
+
 def register_cli(haber_parser, core: HaberKuratorCore):
     """Build the hermes haber argparse tree."""
+    # Override error handler to try NLP on unknown commands
+    _orig_error = haber_parser.error
+    def _nlp_aware_error(message):
+        import sys as _sys
+        try:
+            # Extract raw text from sys.argv
+            _argv = _sys.argv
+            _idx = -1
+            for _i, _a in enumerate(_argv):
+                if _a == "haber" and _i + 1 < len(_argv):
+                    _idx = _i + 1
+                    break
+            if _idx >= 0:
+                _raw = " ".join(_argv[_idx:])
+                _result = handle_nlp(_raw, core)
+                if _result:
+                    console.print(Markdown(_result))
+                    _sys.exit(0)
+        except Exception:
+            pass
+        _orig_error(message)
+
+    haber_parser.error = _nlp_aware_error
+
     subs = haber_parser.add_subparsers(dest="haber_command")
 
     # ══════════════════════════════════════════════════════════════
