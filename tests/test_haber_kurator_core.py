@@ -1,5 +1,5 @@
 """
-Haber-Kuratör v3.0.0 — Birim Testleri
+Haber-Kuratör v3.1.0 — Birim Testleri
 Tüm haber doğrulama fonksiyonlarını test eder: fetch, cluster, cross-verify,
 hallucination, correction, state machine, edge cases.
 """

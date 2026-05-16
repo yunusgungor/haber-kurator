@@ -3,7 +3,7 @@
 > **Amaç:** Haber-Kuratör plugin'ini sıfırdan kurmak, tüm hazırlık adımlarını hatasız tamamlamak.
 > **Hedef:** USER_GUIDE.md Bölüm 3 (Kurulum ve Yapılandırma) + Bölüm 4.1 (İlk Run) eksiksiz.
 >
-> **Versiyon:** v3.0.0
+> **Versiyon:** v3.1.0
 > **Kapsam:** Plugin yüklemesi → strateji/voice/stores → CLI fix → audit → ilk run — tüm tuzaklar dahil
 
 ---
@@ -83,12 +83,12 @@ hermes haber status   # Çalışmalı
 # Adım 4a: Dizin yapısını oluştur
 hermes haber setup
 
-# ✓ Output: "Haber Kuratör v3.0.0 structure initialized."
+# ✓ Output: "Haber Kuratör v3.1.0 structure initialized."
 
 # Adım 4b: Sistem sağlık kontrolü
 hermes haber audit
 
-# ✓ Output: "Haber Kuratör v3.0.0 Audit: X active, Y archived. Structure OK."
+# ✓ Output: "Haber Kuratör v3.1.0 Audit: X active, Y archived. Structure OK."
 ```
 
 **`setup` komutu şu dizinleri oluşturur:**

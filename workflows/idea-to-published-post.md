@@ -1,4 +1,4 @@
-# Workflow: Idea → Published Post (News Edition — v3.0.0)
+# Workflow: Idea → Published Post (News Edition — v3.1.0)
 
 > **Haber üretimi için 15 aşamalı ana playbook.** 
 > Artık kişisel içerik sistemi DEĞİL, çok kaynaklı haber doğrulama sistemidir.

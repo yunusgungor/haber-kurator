@@ -1,4 +1,4 @@
-# Workflow: Verifier Checklist — News Edition (v3.0.0)
+# Workflow: Verifier Checklist — News Edition (v3.1.0)
 
 > **Adım adım haber doğrulama kontrol listesi.**
 > Artık sadece slop ve rubrik değil — KAYNAK DOĞRULAMA da eklenmiştir.
@@ -141,7 +141,7 @@ voice_check:
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│  VERDICT — News Edition v3.0.0                      │
+│  VERDICT — News Edition v3.1.0                      │
 ├─────────────────────────────────────────────────────┤
 │                                                     │
 │  SOURCE AUDIT:  [PASS / FAIL]                       │

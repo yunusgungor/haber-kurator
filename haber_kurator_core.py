@@ -863,7 +863,7 @@ class FetchedNewsItem:
 # ══════════════════════════════════════════════════════════════
 
 class HaberKuratorCore:
-    """Haber Kuratör v3.0.0 — News Verification Engine.
+    """Haber Kuratör v3.1.0 — News Verification Engine.
     
     Transforms raw news from world-leading sources into verified,
     source-attributed news content through multi-source cross-verification,

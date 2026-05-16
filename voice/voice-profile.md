@@ -1,4 +1,4 @@
-# Üslup Profili — Haber Kuratör v3.0.0 (Haber Üslubu)
+# Üslup Profili — Haber Kuratör v3.1.0 (Haber Üslubu)
 
 > **Bu bir haber sistemidir.** Kişisel blog, sosyal medya veya pazarlama içeriği değil.
 > Her cümle, her iddia bir kaynağa dayanmalıdır. Yorum yok, duygu yok, spekülasyon yok.

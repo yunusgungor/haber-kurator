@@ -1,4 +1,4 @@
-# Source Watchlist — Haber Kuratör v3.0.0
+# Source Watchlist — Haber Kuratör v3.1.0
 
 > **Güvenilirlik Kademeleri:** Dünyanın önde gelen, doğruluğu kanıtlanmış medya kaynakları.
 > Her haber en az 2 bağımsız kaynakta doğrulanmadan yayınlanmaz.
