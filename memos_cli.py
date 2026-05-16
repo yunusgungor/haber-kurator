@@ -29,7 +29,7 @@ def post_memo(content, tags=None, visibility="PUBLIC"):
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
-        "User-Agent": f"Haber-Kuratör/3.0.0",
+        "User-Agent": f"Haber-Kuratör/3.1.0",
     }
 
     if tags:

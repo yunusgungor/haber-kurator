@@ -1,5 +1,5 @@
 """
-CLI registration for Haber Kuratör v3.0.0 — News Verification System.
+CLI registration for Haber Kuratör v3.1.0 — News Verification System.
 
 News-only commands:
 - fetch, verify, publish, correct
@@ -67,7 +67,7 @@ def register_cli(haber_parser, core: HaberKuratorCore):
     # SYSTEM
     # ══════════════════════════════════════════════════════════════
 
-    subs.add_parser("setup", help="Initialize Haber Kuratör v3.0.0 directory structure")
+    subs.add_parser("setup", help="Initialize Haber Kuratör v3.1.0 directory structure")
     subs.add_parser("status", help="Show state of all active haber runs")
     subs.add_parser("audit", help="Full system audit (directories, sources, health)")
 

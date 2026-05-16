@@ -1,4 +1,4 @@
-"""Haber Kuratör Plugin v3.0.0 — News Verification System.
+"""Haber Kuratör Plugin v3.1.0 — News Verification System.
 
 Complete multi-source news verification platform:
 - Fetches from world's leading proven-accurate media sources (Reuters, AP, AFP, BBC, etc.)
@@ -20,7 +20,7 @@ from .cli import register_cli
 
 logger = logging.getLogger(__name__)
 
-VERSION = "3.0.0"
+VERSION = "3.1.0"
 
 
 def register(ctx: Any) -> None:
@@ -34,7 +34,7 @@ def register(ctx: Any) -> None:
     manager_schema = {
         "name": "haber_kurator_manager",
         "description": (
-            "Complete Haber Kuratör management — News Verification Engine v3.0.0.\n"
+            "Complete Haber Kuratör management — News Verification Engine v3.1.0.\n"
             "News pipeline: fetch_news → verify_news → publish_verified → create_news_run.\n"
             "Verification: cross_verify_story → hallucination_check → issue_correction.\n\n"
             "CRITICAL: This is a NEWS system. Every fact is cross-verified against "
@@ -98,7 +98,7 @@ def register(ctx: Any) -> None:
         toolset="haber",
         schema=manager_schema,
         handler=lambda args, **kw: tool_haber_kurator_manager(core, args, **kw),
-        description="Complete Haber Kuratör pipeline management tool — News Verification Engine v3.0.0.",
+        description="Complete Haber Kuratör pipeline management tool — News Verification Engine v3.1.0.",
         is_async=True,
     )
 
@@ -244,6 +244,10 @@ def register(ctx: Any) -> None:
             ctx.reply(f"✅ {len(items)} haber maddesi çekildi, kümeleniyor...")
             _t.begin("Haberler kümeleniyor (benzerlik analizi)")
             clusters = core.cluster_stories(items)
+            if not clusters:
+                _t.fail("Hiç haber kümesi oluşmadı")
+                ctx.reply("❌ Haber kaynaklarından veri alınamadı. RSS beslemeleri geçici olarak erişilemez olabilir.")
+                return _t.report([f"\n❌ {len(items)} haber maddesinden küme oluşmadı."])
             _t.end()
             ctx.reply(f"✅ Kümelenme tamamlandı: {len(items)} madde → {len(clusters)} küme")
             top = sorted(clusters, key=lambda c: c["source_count"], reverse=True)[:10]
@@ -317,6 +321,10 @@ def register(ctx: Any) -> None:
             ctx.reply(f"✅ {len(items)} haber çekildi, kümeleniyor...")
             _t.begin("Haberler kümeleniyor")
             clusters = core.cluster_stories(items)
+            if not clusters:
+                _t.fail("Hiç haber kümesi oluşmadı")
+                ctx.reply("❌ Haber kaynaklarından veri alınamadı veya kümelenecek haber bulunamadı.")
+                return _t.report([f"\n❌ {len(items)} haber maddesinden küme oluşmadı. Kaynaklar geçici olarak erişilemez olabilir."])
             ctx.reply(f"✅ {len(clusters)} küme oluşturuldu. {limit} haber doğrulanıyor...")
             _t.begin(f"En yüksek puanlı {limit} haber doğrulanıyor")
             verified_count = 0; blocked_count = 0; verified_list = []
@@ -389,6 +397,10 @@ def register(ctx: Any) -> None:
             ctx.reply(f"✅ {len(items)} haber çekildi, kümeleniyor...")
             _t.begin("Haberler kümeleniyor")
             clusters = core.cluster_stories(items)
+            if not clusters:
+                _t.fail("Hiç haber kümesi oluşmadı")
+                ctx.reply("❌ Haber kaynaklarından veri alınamadı veya kümelenecek haber bulunamadı.")
+                return _t.report([f"\n❌ {len(items)} haber maddesinden küme oluşmadı."])
             ctx.reply(f"✅ {len(clusters)} küme oluşturuldu.")
             _t.begin("Yayınlanıyor")
             results = []
@@ -487,7 +499,7 @@ def register(ctx: Any) -> None:
     ctx.register_command(
         "haber",
         handler=handle_slash,
-        description="Haber Kuratör v3.0.0 — News Verification System. Fetch, verify, publish, correct.",
+        description="Haber Kuratör v3.1.0 — News Verification System. Fetch, verify, publish, correct.",
         args_hint="[fetch|verify|publish|correct|hallucination|search|sources|status|audit|setup|runs|archive]",
     )
 
@@ -497,10 +509,10 @@ def register(ctx: Any) -> None:
 
     ctx.register_cli_command(
         name="haber",
-        help="Haber Kuratör v3.0.0 — News Verification System",
+        help="Haber Kuratör v3.1.0 — News Verification System",
         setup_fn=lambda sub: register_cli(sub, core),
         description=(
-            "Haber Kuratör News Verification Engine v3.0.0.\n"
+            "Haber Kuratör News Verification Engine v3.1.0.\n"
             "Multi-source news fetching → cross-verification → fact-check → publish.\n"
             "8-state lifecycle, 4 credibility tiers.\n"
             "Powered by Reuters, AP, AFP, BBC, Bloomberg, WSJ and more."
@@ -551,7 +563,7 @@ def register(ctx: Any) -> None:
         ctx.register_skill(
             "haber-kurator",
             skill_path,
-            description="Haber Kuratör v3.0.0 — News Verification System: multi-source fetch, cross-verify, fact-check, publish.",
+            description="Haber Kuratör v3.1.0 — News Verification System: multi-source fetch, cross-verify, fact-check, publish.",
         )
 
     logger.info("Haber Kuratör v%s (News Verification Engine) registered.", VERSION)

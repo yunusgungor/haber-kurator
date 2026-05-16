@@ -26,7 +26,7 @@ import pytest
 
 class TestConstants:
     def test_version(self):
-        assert VERSION == "3.0.0"
+        assert VERSION == "3.1.0"
 
     def test_state_count(self):
         assert len(STATE_LIFECYCLE) == 8

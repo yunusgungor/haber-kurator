@@ -1,8 +1,8 @@
 """
-Haber Kuratör Core v3.0.0 — News Verification Engine
+Haber Kuratör Core v3.1.0 — News Verification Engine
 ====================================================
 Complete news verification system: multi-source fetching → cross-verification
-→ fact-check pipeline → source-attributed writing → human review → publish.
+→ fact-check pipeline → publish/correct.
 
 Built on world's leading proven-accurate media sources with automated
 cross-referencing to ensure every published fact is verified.
@@ -14,7 +14,7 @@ Key Features:
 • Hallucination protection: Writer Agent restricted to source-attributed facts
 • Fact-check pipeline before any draft is written
 • Correction workflow for post-publication errors
-• 18-state lifecycle (14 original + fact_checking, cross_verified, corrected, retracted)
+• 8-state news lifecycle
 • 65+ slop patterns across 4 severity tiers
 • Cross-language clustering (English/Turkish)
 """
@@ -35,10 +35,10 @@ from enum import Enum
 
 logger = logging.getLogger(__name__)
 
-VERSION = "3.0.0"
+VERSION = "3.1.0"
 
 CONFIG = {
-    "version": "3.0.0",
+    "version": "3.1.0",
     "min_verification_level": 1,  # Minimum level to publish (0-3)
     "cross_verify_sources": 2,    # Minimum sources that must agree
     "cache_enabled": True,
@@ -690,9 +690,7 @@ ROUTE_VERIFIED = "VERIFIED"
 WRITER_FIELDS = [
     "rubric_self_assessment",
     "avoid_slop_pass",
-    "open_loops_flagged",
-    "voice_check",
-    "source_attribution_check",  # 🔄 NEW: Verify every claim has a source
+    "source_attribution_check",
 ]
 
 # ══════════════════════════════════════════════════════════════
@@ -1852,19 +1850,21 @@ class HaberKuratorCore:
         """One-step: verify + create run + auto-publish if verified.
         
         For fully automated news ingestion with verification gate.
-        Skips idea_review when verification is CONFIRMED or HIGH_CONFIDENCE.
         """
         result = self.create_news_run(cluster)
         if result.get("status") == "exists":
+            # Ensure route key exists even on duplicate
+            result["route"] = "VERIFIED"
             return result
 
         verification_level = result.get("verification", {}).get("verification_level", -1)
         slug = result["slug"]
 
-        # Auto-advance to brief_ready if highly verified
+        # Auto-advance to published if highly verified and no human review
         if verification_level >= 2 and not human_review:
-            self.update_state(slug, "idea_review")
-            self.update_state(slug, "brief_ready")
+            self.update_state(slug, "fact_checking")
+            self.update_state(slug, "cross_verified")
+            self.update_state(slug, "published")
             result["auto_advanced"] = True
 
         return result
@@ -3345,7 +3345,7 @@ Return as markdown:
             obj = run_path / "haber-object.md"
             if obj.exists():
                 content = obj.read_text(encoding="utf-8")
-                for field in ["state", "route", "format", "pillar"]:
+                for field in ["state", "route"]:
                     m = re.search(rf'{field}:\s*(.+)', content, re.IGNORECASE)
                     if m:
                         result[field] = m.group(1).strip()
@@ -3434,7 +3434,7 @@ Return as markdown:
         obj = run_path / "haber-object.md"
         if obj.exists():
             content = obj.read_text(encoding="utf-8")
-            for field in ["title", "state", "route", "format"]:
+            for field in ["title", "state", "route"]:
                 m = re.search(rf'(?:\*\*)?{field}(?:\*\*)?:\*{{0,2}}\s*(.+)', content, re.IGNORECASE)
                 if m:
                     info[field] = m.group(1).strip().lstrip('* ')

@@ -157,28 +157,28 @@ Doğrulanan haberler otomatik `runs/active/` klasörüne eklenir.
 - `fact-check-report.md` — Çapraz doğrulama raporu (YENİ)
 - `context.md` — Writer için kaynak özeti
 
-### 4. YAZIM (Writer Agent)
+### 4. WRITER AGENT (Otomatik Yayın)
 ```
-/haber brief <slug>
-/haber draft <slug>
+/haber auto-publish [--limit 5]
 ```
-**Halüsinasyon Koruması:** Writer Agent SADECE brief'teki kaynaklardaki bilgileri kullanır.
-- Her iddia bir kaynağa bağlı olmalı
-- brief'te olmayan hiçbir bilgi kullanılamaz
-- Bilinmeyen şeyler `open_loops_flagged`'de işaretlenir
+WriterAgent, doğrulanmış haberleri otomatik olarak [Özet] - [Detaylar] - [Kaynak] formatında oluşturup Memos'a yayınlar.
+- Her iddia kaynak atıflı
+- Sadece kaynaktaki bilgiler kullanılır
+- Slop taraması + dinamik rubrik skoru ile kalite kontrol
 
-### 5. DOĞRULAMA (Verifier Agent)
+### 5. HALÜSİNASYON TARAMASI
 ```
-/haber verify-draft <slug>
 /haber hallucination <slug>
 ```
-**Kaynak Atıf Denetimi:** Her iddianın bir kaynağı var mı?
-**Halüsinasyon Taraması:** brief'te olmayan uydurma bilgi var mı?
+Yayın öncesi otomatik halüsinasyon kontrolü:
+- Kaynaksız istatistik/rakam
+- Spekülatif dil ("could mean", "might indicate")
+- Atıfsız alıntılar
+- Doğrulanmamış iddialar
 
-### 6. DÜZELTME (Correction) — YENİ
+### 6. DÜZELTME (Correction)
 ```
-/hermes haber correct <slug> "hata açıklaması"
-/haber correct <slug> --info "doğru bilgi"
+/haber correct <slug> "hata açıklaması"
 /haber correct <slug> --retract
 ```
 Yayın sonrası hata tespit edilirse:
@@ -187,21 +187,12 @@ Yayın sonrası hata tespit edilirse:
 
 ---
 
-## 📋 State Makinesi — 18 Aşama
+## 📋 State Makinesi — 8 Aşama (News Only)
 
 ```
-captured → fact_checking → cross_verified → idea_review → brief_ready
-→ drafting → verification → draft_review → approved → scheduler_ready
-→ scheduled → published → feedback_24h → feedback_72h → learned
-→ [correction_needed → corrected / retracted] → archived
+captured → fact_checking → cross_verified → published
+→ correction_needed → corrected / retracted → archived
 ```
-
-**Yeni State'ler (v3.0):**
-- `fact_checking`: Çapraz doğrulama devam ediyor
-- `cross_verified`: Haber doğrulandı, brief yazılabilir
-- `correction_needed`: Yayın sonrası hata tespit edildi
-- `corrected`: Düzeltme yayınlandı
-- `retracted`: Haber geri çekildi
 
 ---
 
@@ -219,33 +210,18 @@ haber-kurator/
 │   └── master-avoid-slop.md    ← 54+ slop kalıbı
 ├── runs/active/{slug}/
 │   ├── haber-object.md         ← State, route, verification level
-│   ├── idea.md                 ← Kaynak listesi
-│   ├── fact-check-report.md    ← 🔄 Cross-verification raporu
+│   ├── fact-check-report.md    ← Cross-verification raporu
 │   ├── context.md              ← Writer context
-│   ├── brief.md                ← Writer Context Packet
-│   ├── draft-package.md        ← Taslak
-│   ├── verifier-report.md      ← Verifier çıktısı
-│   ├── feedback.md             ← Post-pub feedback
-│   └── correction.md           ← 🔄 Düzeltme/retraction
-├── stores/
-│   ├── inbox.md
-│   ├── ideas/
-│   ├── hooks/
-│   ├── proof/
-│   └── feedback/
-├── workflows/
-│   ├── idea-to-published-post.md    ← Ana workflow (güncellendi)
-│   ├── verifier-checklist.md        ← Verifier kontrol listesi (güncellendi)
-│   ├── scheduler-handoff.md
-│   └── feedback-loop.md
-└── references/
+│   └── correction.md           ← Düzeltme/retraction
+├── references/
+└── tests/
 ```
 
 ---
 
-## 🚀 Kullanım Komutları
+## Kullanım Komutları
 
-### Haber Toplama & Doğrulama (YENİ)
+### Haber Toplama & Doğrulama
 ```
 /hermes haber fetch [--category news|technology|business|science]
 /hermes haber verify [--category ...] [--limit 10]
@@ -253,21 +229,19 @@ haber-kurator/
 /hermes haber sources
 ```
 
-### Halüsinasyon & Düzeltme (YENİ)
+### Halüsinasyon & Düzeltme
 ```
 /hermes haber hallucination <slug>
 /hermes haber correct <slug> "hata" --info "doğru"
 /hermes haber correct <slug> --retract
 ```
 
-### Legacy Komutlar
+### Otomatik Yayın & Sistem
 ```
+/hermes haber auto-publish [--limit 5]
 /hermes haber status
-/hermes haber new "fikir" --source verified
-/hermes haber brief <slug>
-/hermes haber draft <slug>
-/hermes haber verify-draft <slug>
-/hermes haber scan <slug>
-/hermes haber post <slug>
 /hermes haber audit
+/hermes haber runs
+/hermes haber archive <slug>
+/hermes haber setup
 ```

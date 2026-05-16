@@ -254,7 +254,7 @@ Turkish:"""
         req = urllib.request.Request(api_url, data=payload, method="POST")
         req.add_header("Authorization", f"Bearer {token}")
         req.add_header("Content-Type", "application/json")
-        req.add_header("User-Agent", "Haber-Kuratur/3.0.0-WriterAgent")
+        req.add_header("User-Agent", "Haber-Kuratör/3.1.0-WriterAgent")
 
         try:
             with urllib.request.urlopen(req, timeout=15) as resp:
@@ -387,17 +387,14 @@ rubric_self_assessment:
 avoid_slop_pass:
 - (clean)
 
-voice_check:
-- All rules followed: yes
-
 source_attribution_check:
 - Every claim sourced: yes
 - Sources approved: yes
 """
             (self.core.active_runs / slug / "draft-package.md").write_text(draft, encoding="utf-8")
             
-            # Step 5: Update state
-            self.core.update_state(slug, "drafting")
+            # Step 5: Update state to published
+            self.core.update_state(slug, "published")
             
             # Step 6: Post to Memos
             success = self.post_to_memos(article)

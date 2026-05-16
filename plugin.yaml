@@ -1,5 +1,5 @@
 name: haber-kurator
-version: 3.0.0
+version: 3.1.0
 description: "News Verification Engine: multi-source news fetching → cross-verification → fact-check → publish. Built on Reuters, AP, AFP, BBC, Bloomberg, WSJ and 26+ proven-accurate sources with automated 4-tier cross-referencing."
 author: "Memos Küratörü"
 kind: standalone
