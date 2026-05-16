@@ -3787,7 +3787,7 @@ async def tool_haber_kurator_manager(core: HaberKuratorCore, args: Dict[str, Any
         # Writer Agent — Auto Publish
         if action == "auto_publish":
             try:
-                from writer_agent import WriterAgent
+                from .writer_agent import WriterAgent
                 agent = WriterAgent(core)
                 # Pass Hermes Agent LLM for Turkish translation
                 llm = kwargs.get("parent_agent")

@@ -308,7 +308,7 @@ def register_cli(haber_parser, core: HaberKuratorCore):
         elif cmd == "auto-publish":
             limit = getattr(args, "limit", 5)
             category = getattr(args, "category", None)
-            from writer_agent import WriterAgent
+            from .writer_agent import WriterAgent
             agent = WriterAgent(core)
             # Try to use Hermes LLM for Turkish translation
             try:
