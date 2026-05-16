@@ -5,7 +5,7 @@ Generates proper [Özet] - [Detaylar] - [Kaynak] formatted news articles
 from verified story clusters and publishes them to Memos.
 """
 
-import os, sys, json, urllib.request, re, time
+import os, json, urllib.request, re, time
 from pathlib import Path
 from datetime import datetime
 

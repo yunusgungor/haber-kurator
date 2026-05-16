@@ -574,23 +574,6 @@ def register(ctx: Any) -> None:
         if sub == "setup":
             return core.setup()
         
-        if sub == "publish":
-            """Publish verified news directly: fetch, verify, create runs."""
-            category = argv[1] if len(argv) > 1 and argv[1] in ("news", "technology", "business", "science") else None
-            limit = int(argv[2]) if len(argv) > 2 and argv[2].isdigit() else 5
-            auto = "--auto" in argv
-            import time
-            items = core.fetch_all_news(category)
-            clusters = core.cluster_stories(items)
-            results = []
-            for c in sorted(clusters, key=lambda x: x.get('source_count', 0), reverse=True)[:limit]:
-                results.append(core.publish_verified_news(c, human_review=not auto))
-            lines = [f"### 📰 Publish Results ({len(results)} stories)", ""]
-            for r in results:
-                status_icon = "✅" if r.get("status") != "exists" else "⏭️"
-                lines.append(f"{status_icon} **{r.get('slug', '?')}** — {r.get('route', '?')}")
-            return "\n".join(lines)
-
         if sub == "signal":
             src = argv[1] if len(argv) > 1 else "x"
             signals = core.process_signal(src)
@@ -633,8 +616,9 @@ def register(ctx: Any) -> None:
 
         if sub == "archive":
             if len(argv) < 2:
-                return "Usage: /haber archive <slug>"
-            return core.archive_run(argv[1])
+                return "Usage: /haber archive <slug> [--force]"
+            force = "--force" in argv
+            return core.archive_run(argv[1], force=force)
 
         if sub == "learnings":
             topic = argv[1] if len(argv) > 1 else None
