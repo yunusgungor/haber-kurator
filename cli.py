@@ -14,7 +14,7 @@ from rich.table import Table
 from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.markdown import Markdown
-from haber_kurator_core import HaberKuratorCore
+from .haber_kurator_core import HaberKuratorCore
 
 console = Console()
 
@@ -511,4 +511,5 @@ def register_cli(haber_parser, core: HaberKuratorCore):
             console.print(f"[red]Unknown command: {cmd}[/red]")
             haber_parser.print_help()
 
+    haber_parser.set_defaults(func=handler)
     return handler

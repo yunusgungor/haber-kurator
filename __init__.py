@@ -15,8 +15,8 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 import logging
 
-from haber_kurator_core import HaberKuratorCore, tool_haber_kurator_manager, tool_haber_kurator_retriever
-from cli import register_cli
+from .haber_kurator_core import HaberKuratorCore, tool_haber_kurator_manager, tool_haber_kurator_retriever
+from .cli import register_cli
 
 logger = logging.getLogger(__name__)
 
@@ -203,10 +203,8 @@ def register(ctx: Any) -> None:
     }
 
     def tool_memos_publisher(args: Dict[str, Any], **kw) -> str:
-        import sys
-        sys.path.append(str(root))
         try:
-            import memos_cli
+            from . import memos_cli
             content = args.get("content", "")
             tags = args.get("tags", "")
             visibility = args.get("visibility", "PUBLIC")
@@ -494,7 +492,7 @@ def register(ctx: Any) -> None:
             # Read draft and post to Memos directly
             draft = draft_path.read_text(encoding="utf-8")
             content = draft.split("draft:")[1].split("rubric_self_assessment")[0].strip() if "draft:" in draft else draft
-            from memos_cli import post_memo
+            from .memos_cli import post_memo
             try:
                 post_memo(content)
                 core.update_state(slug, "published")

@@ -9,9 +9,7 @@ import os, sys, json, urllib.request, re, time
 from pathlib import Path
 from datetime import datetime
 
-# Add plugin path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from haber_kurator_core import HaberKuratorCore, VerificationLevel
+from .haber_kurator_core import HaberKuratorCore, VerificationLevel
 
 
 class WriterAgent:
