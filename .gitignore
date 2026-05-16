@@ -1,0 +1,34 @@
+# Git ignore for Haber Kuratör
+
+## Kişisel içerik — ASLA commit edilme
+stores/inbox.md           # Ham fikirler, kişisel
+stores/workboard.md       # Yapılacak işler, kişisel
+stores/ideas/             # Olgunlaşmış fikirler, kişisel
+stores/hooks/             # Hook'lar, kişisel deneyimler
+stores/proof/             # Kanıtlar, kişisel projeler
+stores/feedback/          # Yayın feedback, kişisel metrikler
+
+## Üretim verileri — ASLA commit edilme
+runs/active/              # Aktif içerik objeleri
+runs/archive/             # Arşivlenmiş içerikler
+
+## macOS / Linux
+.DS_Store
+*.swp
+*.swo
+*~
+Thumbs.db
+
+## Editörler
+.vscode/
+.idea/
+*.sublime-*
+
+## Loglar
+*.log
+
+## Ortam değişkenleri
+.env
+
+__pycache__
+.state_cache
