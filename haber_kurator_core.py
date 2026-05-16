@@ -2686,6 +2686,17 @@ CRITICAL RULES:
         number_claims = re.finditer(r'(?:\$?\d+[\.\d,]*\s*(?:million|billion|trillion|percent|%|people|dollars|euros)?)', draft_main)
         for match in number_claims:
             num_text = match.group(0)
+
+            # Skip numbers that are part of URLs (false positive prevention)
+            line_start = draft_main.rfind('\n', 0, match.start()) + 1
+            line_end = draft_main.find('\n', match.end())
+            if line_end == -1:
+                line_end = len(draft_main)
+            line_text = draft_main[line_start:line_end]
+            # If the line contains a URL pattern, skip numbers in that line
+            if re.search(r'https?://\S*', line_text):
+                continue
+
             start = max(0, match.start() - 200)
             end = min(len(draft), match.end() + 200)
             context = draft[start:end]
@@ -3574,10 +3585,10 @@ Return as markdown:
                 continue
         return results
 
-    def archive_run(self, slug: str) -> str:
+    def archive_run(self, slug: str, force: bool = False) -> str:
         """Move a run from active to archive."""
         state = self.get_state(slug)
-        if state != "learned":
+        if state != "learned" and not force:
             return f"❌ Cannot archive {slug} (state: {state}). Must be 'learned' first."
 
         src = self.active_runs / slug
