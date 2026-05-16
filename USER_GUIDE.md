@@ -1,626 +1,1496 @@
-# Haber Kuratör v3.0.0 — Kapsamlı Kullanıcı Kılavuzu
+# Haber-Kuratör v3.0.0 — Kapsamlı Kullanım Kılavuzu
 
-> **News Verification Engine** — Çok kaynaklı haber doğrulama sistemi.
-> Dünyanın önde gelen 35 güvenilir kaynağından haber çeker, çapraz doğrular
-> ve Memos platformunda yayınlar.
->
-> **Plugin:** `~/.hermes/plugins/haber-kurator/`
-> **Kaynak:** Memos Küratörü — Tarafsız Haber ve Bilgi Akışı
+> **Çok kaynaklı haber doğrulama ve yayın motoru.**
+> 35+ küresel güvenilir kaynaktan RSS beslemeleriyle haber toplar, aynı haberleri
+> otomatik kümeler, 2+ bağımsız kaynakta çapraz doğrular ve kaynak atıflarıyla
+> Memos platformuna yayınlar.
 
----
-
-## 📋 İçindekiler
-
-1. [Giriş — Haber Kuratör Nedir?](#1-giriş--haber-kuratör-nedir)
-2. [Mimariye Genel Bakış](#2-mimariye-genel-bakış)
-3. [Kaynak Güvenilirlik Sistemi](#3-kaynak-güvenilirlik-sistemi)
-4. [Çapraz Doğrulama Motoru](#4-çapraz-doğrulama-motoru)
-5. [Writer Agent — Otomatik Haber Üretimi](#5-writer-agent--otomatik-haber-üretimi)
-6. [19-State Lifecycle](#6-19-state-lifecycle)
-7. [Kalite Kontrolleri](#7-kalite-kontrolleri)
-8. [Düzeltme Workflow'u](#8-düzeltme-workflowu)
-9. [Kurulum ve Yapılandırma](#9-kurulum-ve-yapılandırma)
-10. [Komut Referansı](#10-komut-referansı)
-11. [Proje Yapısı](#11-proje-yapısı)
-12. [Sorun Giderme](#12-sorun-giderme)
+**Yazar:** Memos Küratörü
+**Lisans:** MIT
+**Teknolojiler:** Python 3.9+, Hermes Agent Plugin Sistemi, RSS/Atom XML, Memos REST API
 
 ---
 
-## 1. Giriş — Haber Kuratör Nedir?
+## İçindekiler
 
-**Haber Kuratör**, haber üretimini uçtan uca otomatize eden bir doğrulama sistemidir:
-
-1. **📡 Kaynaklardan haber çeker** — Reuters, AP, AFP, BBC, Bloomberg gibi 35 küresel kaynaktan RSS beslemeleri
-2. **🔍 Çapraz doğrular** — Aynı haberi 2+ kaynakta karşılaştırır, doğruluk seviyesi belirler
-3. **🤖 Türkçe haber üretir** — Writer Agent ile [Özet] - [Detaylar] - [Kaynak] formatında yazar
-4. **📤 Memos'ta yayınlar** — API üzerinden otomatik paylaşım
-
-### 1.1 Felsefe
-
-```
-╔══════════════════════════════════════════════════════════════════╗
-║                                                                  ║
-║   Bu bir HABER SİSTEMİDİR.                                      ║
-║                                                                  ║
-║   ▌ Sonuçlar GERÇEK olmalı                                      ║
-║   ▌ Sahte haber infiale yol açar                                ║
-║   ▌ Her iddia bir kaynağa dayanmalı                             ║
-║   ▌ 2+ bağımsız kaynakta doğrulanmayan haber yayınlanmaz        ║
-║                                                                  ║
-╚══════════════════════════════════════════════════════════════════╝
-```
-
-### 1.2 Ne İşe Yarar?
-
-| Yetenek | Açıklama |
-|---------|----------|
-| **📡 Haber Toplama** | 35 kaynaktan RSS/Atom beslemesi çeker, tekilleştirir |
-| **🔍 Kümeleme** | Aynı haberi farklı kaynaklardan gruplar (EN/TR çapraz dil) |
-| **✅ Çapraz Doğrulama** | Her haberin kaç kaynakta, hangi kademede bildirildiğini analiz eder |
-| **🤖 Writer Agent** | Doğrulanmış haberleri Türkçe otomatik yazar |
-| **📤 Memos Yayını** | API üzerinden otomatik paylaşım |
-| **🛡️ Halüsinasyon Koruması** | Kaynaksız iddia, uydurma alıntı, spekülasyon tespiti |
-| **🔬 Slop Taraması** | 122 pattern ile AI kokusu tespiti |
-| **📊 State Yönetimi** | 19-state lifecycle ile her haberin durumunu takip |
-| **✏️ Düzeltme** | Yayın sonrası hata durumunda correction/retraction |
+1. [Sistem Mimarisi](#1-sistem-mimarisi)
+2. [Veri Modeli ve Sınıf Yapısı](#2-veri-modeli-ve-sınıf-yapısı)
+3. [Kurulum ve Yapılandırma](#3-kurulum-ve-yapılandırma)
+4. [Uçtan Uca Çalışma Döngüsü](#4-uçtan-uca-çalışma-döngüsü)
+5. [Kaynak Güvenilirlik Sistemi](#5-kaynak-güvenilirlik-sistemi)
+6. [Çapraz Doğrulama Algoritması](#6-çapraz-doğrulama-algoritması)
+7. [Kümeleme ve Çapraz Dil Desteği](#7-kümeleme-ve-çapraz-dil-desteği)
+8. [Halüsinasyon Koruması](#8-halüsinasyon-koruması)
+9. [54+ Slop Tespit Kalıbı](#9-54-slop-tespit-kalıbı)
+10. [Writer Agent ve Otomatik Haber Üretimi](#10-writer-agent-ve-otomatik-haber-üretimi)
+11. [18 Aşamalı State Makinesi](#11-18-aşamalı-state-makinesi)
+12. [12 Puanlık Rubrik Değerlendirme](#12-12-puanlık-rubrik-değerlendirme)
+13. [Düzeltme ve Geri Çekme Mekanizması](#13-düzeltme-ve-geri-çekme-mekanizması)
+14. [Memos Yayınlama](#14-memos-yayınlama)
+15. [Tam Komut Referansı](#15-tam-komut-referansı)
+16. [Adım Adım Örnek Senaryo](#16-adım-adım-örnek-senaryo)
+17. [Sık Sorulan Sorular ve Hata Çözümleri](#17-sık-sorulan-sorular-ve-hata-çözümleri)
 
 ---
 
-## 2. Mimariye Genel Bakış
+## 1. Sistem Mimarisi
+
+### 1.1 Genel Akış Diyagramı
 
 ```
-╔═══════════════════════════════════════════════════════════════════════════╗
-║                      HABER KURATÖR v3.0.0 — MİMARİ                      ║
-╠═══════════════════════════════════════════════════════════════════════════╣
-║                                                                           ║
-║  📡 KAYNAK KATMANI                                                        ║
-║  ┌─────────────────────────────────────────────────────────────────┐     ║
-║  │ Tier 0: Reuters, AP, AFP, BBC                                  │     ║
-║  │ Tier 1: Bloomberg, WSJ, FT, NYT, Guardian, WaPo, Al Jazeera... │     ║
-║  │ Tier 2: Nature, MIT Tech Review, Wired...                      │     ║
-║  │ Tier TR: AA, BBC Türkçe, Euronews TR, T24, Diken, Sözcü...    │     ║
-║  └─────────────────────────────────────────────────────────────────┘     ║
-║                                    │                                     ║
-║                                    ▼                                     ║
-║  🔍 DOĞRULAMA KATMANI                                                    ║
-║  ┌─────────────────────────────────────────────────────────────────┐     ║
-║  │ 1. fetch_all_news() → RSS/Atom beslemeleri çekilir              │     ║
-║  │ 2. _deduplicate_news() → URL + başlık bazında tekilleştirme    │     ║
-║  │ 3. cluster_stories() → Aynı haber kümelenir (EN/TR destekli)    │     ║
-║  │ 4. cross_verify_story() → Doğrulama seviyesi belirlenir        │     ║
-║  └─────────────────────────────────────────────────────────────────┘     ║
-║                                    │                                     ║
-║                                    ▼                                     ║
-║  🤖 ÜRETİM KATMANI (Writer Agent)                                       ║
-║  ┌─────────────────────────────────────────────────────────────────┐     ║
-║  │ 5. publish_verified_news() → Run klasörü oluşturulur            │     ║
-║  │ 6. generate_news() → Türkçe haber metni yazılır                │     ║
-║  │    [Özet] - [Detaylar] - [Kaynak] formatında                   │     ║
-║  │ 7. hallucination_check() → Halüsinasyon taranır                │     ║
-║  │ 8. scan_slop() → Slop pattern kontrolü                         │     ║
-║  └─────────────────────────────────────────────────────────────────┘     ║
-║                                    │                                     ║
-║                                    ▼                                     ║
-║  📤 YAYIN KATMANI                                                         ║
-║  ┌─────────────────────────────────────────────────────────────────┐     ║
-║  │ 9. post_to_memos() → Memos API'sine POST                       │     ║
-║  │ 10. correction workflow → Hata varsa düzeltme                  │     ║
-║  └─────────────────────────────────────────────────────────────────┘     ║
-║                                                                           ║
-╚═══════════════════════════════════════════════════════════════════════════╝
+                         KAYNAK KATMANI (Source Layer)
+                         ┌─────────────────────────────────────┐
+                         │  Tier 0: Reuters, AP, AFP, BBC      │
+                         │  Tier 1: Bloomberg, WSJ, FT, NYT... │  ← 35+ kaynak
+                         │  Tier 2: Nature, Verge, Wired...    │    4 güven kademesi
+                         │  Tier 3: (genişletilebilir)         │
+                         └──────────┬──────────────────────────┘
+                                    │ RSS/Atom HTTP GET
+                                    ▼
+                          TOPLAMA (fetch_all_news)
+                         ┌─────────────────────────────────────┐
+                         │  • Her kaynağın RSS URL'lerine istek │
+                         │  • XML çözümleme (RSS 2.0 + Atom)   │
+                         │  • Başlık/URL/tarih/özet çıkarma    │
+                         │  • URL bazında deduplikasyon        │
+                         │  • Promosyon içerik filtreleme      │
+                         │  • Hatalı kaynakları atla + log     │
+                         └──────────┬──────────────────────────┘
+                                    ▼
+                          KÜMELEME (cluster_stories)
+                         ┌─────────────────────────────────────┐
+                         │  • Cross-lingual normalizasyon      │
+                         │  • Kelime örtüşmesi ≥ %30           │
+                         │  • Türkçe↔İngilizce eşleştirme      │
+                         │    (savaş→war, ekonomi→economy)     │
+                         │  • En yüksek tier'dan başlık seçimi │
+                         │  • Kaynak sayısına göre sıralama    │
+                         └──────────┬──────────────────────────┘
+                                    ▼
+                       ÇAPRAZ DOĞRULAMA (cross_verify_story)
+                      ┌─────────────────────────────────────────┐
+                      │  • İddia çıkarma (NER + sayısal + fiil) │
+                      │  • Çok kaynaklı teyit (weighted score)  │
+                      │  • Sayısal tutarsızlık tespiti          │
+                      │  • VerificationLevel ataması            │
+                      │  • Detaylı rapor (fact-check-report.md) │
+                      └──────────┬──────────────────────────────┘
+                                 │
+              ┌──────────────────┴──────────────────┐
+              │                                     │
+      verification_level ≥ 1                 verification_level < 1
+      (CONFIRMED/HIGH/MEDIUM)                (LOW/UNVERIFIED)
+              │                                     │
+              ▼                                     ▼
+     ┌──────────────────┐                 ┌──────────────────┐
+     │  create_news_run │                 │  İnsan onayı     │
+     │  → cross_verified│                 │  gerekli         │
+     └────────┬─────────┘                 └──────────────────┘
+              │
+              ▼
+     ┌──────────────────────────────────────────────────────────┐
+     │               PRODUKSİYON PIPELINE                       │
+     │                                                          │
+     │  brief_ready ─► drafting ─► verification ─► draft_review│
+     │     │              │              │              │      │
+     │     │              │     ┌────────┴────────┐     │      │
+     │     │              │     │ hallucination   │     │      │
+     │     │              │     │ check + slop    │     │      │
+     │     │              │     │ scan            │     │      │
+     │     │              │     └─────────────────┘     │      │
+     │     ▼              ▼                             ▼      │
+     │  brief.md    draft-package.md           verifier-report │
+     └──────────────────────────────────────────────────────────┘
+              │
+              ▼
+     ┌──────────────────┐
+     │  published       │──► Memos REST API POST
+     └────────┬─────────┘
+              │
+              ▼
+     ┌──────────────────────────────────────────────────────────┐
+     │         YAYIN SONRASI (Post-Publication)                 │
+     │                                                          │
+     │  feedback_24h → feedback_72h → learned → archived       │
+     │       │              │             │                     │
+     │       └──────┬───────┘             │                     │
+     │              │                     │                     │
+     │        correction_needed           │                     │
+     │              │                     │                     │
+     │         corrected/retracted        │                     │
+     └──────────────────────────────────────────────────────────┘
+```
+
+### 1.2 Python Katman Mimarisi
+
+```
+hermes_plugins.haber_kurator (namespace package)
+│
+├── __init__.py                  ← Plugin giriş noktası
+│   • register(ctx)             ← Hermes plugin API'sine kayıt
+│   • ctx.register_tool()       ← haber_kurator_manager, retriever, memos_publisher
+│   • ctx.register_command()    ← /haber slash command
+│   • ctx.register_cli_command() ← hermes haber CLI ağacı
+│   • ctx.register_hook()       ← on_session_start, post_tool_call
+│   • ctx.register_skill()      ← SKILL.md
+│
+├── haber_kurator_core.py       ← Ana motor (~3900 satır)
+│   • HaberKuratorCore sınıfı   ← Tüm iş mantığı
+│   • Veri modelleri            ← NewsSource, FactClaim, FetchedNewsItem
+│   • Enum'lar                  ← SourceTier, VerificationLevel
+│   • Sabitler                  ← NEWS_SOURCES, STATE_LIFECYCLE, FULL_SLOP_TIER1/2/3
+│
+├── cli.py                      ← CLI handler (~1070 satır)
+│   • register_cli()            ← Argparse ağacı kurulumu
+│   • handler(args)             ← 28 alt komut dağıtıcısı + NLP
+│
+├── writer_agent.py             ← Otomatik haber yazma ajanı
+│   • WriterAgent sınıfı        ← generate_news(), auto_publish(), post_to_memos()
+│
+├── memos_cli.py                ← Memos REST API istemcisi
+│   • post_memo()               ← POST /api/v1/memos
+│   • load_env()                ← .env dosyasından MEMOS_TOKEN okuma
+│
+├── SKILL.md                    ← Hermes Agent skill tanımı
+├── plugin.yaml                 ← Plugin manifest
+│
+├── strategy/                   ← Stratejik dokümanlar
+│   ├── source-watchlist.md     ← 35+ kaynak listesi (tier, RSS, notlar)
+│   ├── positioning.md          ← Konumlandırma cümlesi
+│   ├── audience.md             ← Hedef kitle profili
+│   └── pillars.md              ← İçerik sütunları
+│
+├── voice/                      ← Üslup kuralları
+│   ├── voice-profile.md        ← 5 prensip, yasaklı kalıplar, format
+│   └── master-avoid-slop.md    ← Tier 1-3 slop kalıpları
+│
+├── runs/active/{slug}/         ← Aktif haber run'ları
+│   ├── haber-object.md         ← State, route, verification level
+│   ├── idea.md                 ← Kaynak listesi
+│   ├── fact-check-report.md    ← Çapraz doğrulama raporu
+│   ├── context.md              ← Writer için kaynak özeti
+│   ├── brief.md                ← Writer Context Packet
+│   ├── draft-package.md        ← Taslak + self-assessment
+│   ├── verifier-report.md      ← Denetim raporu
+│   ├── feedback.md             ← Yayın sonrası geri bildirim
+│   └── correction.md           ← Düzeltme/retraction kaydı
+│
+├── stores/                     ← İçerik depoları
+│   ├── inbox.md                ← Fikir giriş kutusu
+│   ├── workboard.md            ← Çalışma panosu
+│   ├── ideas/                  ← Fikir dosyaları
+│   ├── hooks/                  ← Başarılı açılış pattern'leri
+│   ├── proof/                  ← Kanıt/metrik dosyaları
+│   └── feedback/               ← Yayın sonrası analizler
+│
+├── workflows/                  ← Playbook'lar
+│   ├── idea-to-published-post.md
+│   ├── verifier-checklist.md
+│   ├── scheduler-handoff.md
+│   ├── feedback-loop.md
+│   └── archiveling.md
+│
+├── references/                 ← Yardımcı dokümanlar
+│   ├── KULLANIM_KILAVUZU.md
+│   ├── rubric-template.md
+│   ├── production-prompts.md
+│   ├── avoid-slop-patterns.md
+│   ├── setup-workflow.md
+│   ├── audit-technique.md
+│   └── skill-audit-checklist.md
+│
+└── .state_cache/               ← Otomatik oluşturulan state cache
+    └── runs_state.json         ← JSON formatında state veritabanı
+```
+
+### 1.3 HaberKuratorCore Sınıfı Detayı
+
+```python
+class HaberKuratorCore:
+    """
+    Ana iş motoru. Tüm haber toplama, doğrulama, state yönetimi
+    ve dosya işlemlerini yürütür.
+    """
+    
+    # ── Constructor ──
+    def __init__(self, root: Path):
+        # Dizin yapısı
+        self.root = root                    # Plugin kök dizini
+        self.strategy = root / "strategy"
+        self.voice = root / "voice"
+        self.active_runs = root / "runs" / "active"
+        self.archive = root / "runs" / "archive"
+        self.stores = root / "stores"
+        self.workflows = root / "workflows"
+        self.references = root / "references"
+        
+        # Slop pattern listeleri (FULL_SLOP_TIER1/2/3 + BONUS)
+        self.slop_tier1 = FULL_SLOP_TIER1   # 30+ kritik pattern
+        self.slop_tier2 = FULL_SLOP_TIER2   # 30+ yüksek pattern
+        self.slop_tier3 = FULL_SLOP_TIER3   # 30+ orta pattern
+        self.slop_bonus = FULL_SLOP_BONUS   # 9 ton pattern'i
+        
+        # 35+ haber kaynağı (NEWS_SOURCES dict)
+        self.sources = NEWS_SOURCES.copy()
+        
+        # State cache (JSON dosyası)
+        self._state_cache: Dict[str, RunState] = {}
+        self._load_state_cache()
 ```
 
 ---
 
-## 3. Kaynak Güvenilirlik Sistemi
+## 2. Veri Modeli ve Sınıf Yapısı
 
-### 3.1 Güvenilirlik Kademeleri
+### 2.1 Temel Veri Tipleri
 
-Sistem, her haber kaynağını 4 kademede sınıflandırır:
+```python
+@dataclass
+class NewsSource:
+    """Bir haber kaynağının metadata'sı."""
+    name: str                    # Görünen ad (örn: "Reuters")
+    base_url: str                # Ana sayfa URL'si
+    category: str                # news, technology, business, science
+    tier: SourceTier             # PRIMARY=0, MAJOR=1, SPECIALIZED=2
+    rss_feeds: List[str]        # RSS/Atom besleme URL'leri
+    language: str = "en"         # tr, en
+    country: str = "global"
+    notes: str = ""              # Açıklama ve güven notu
 
-| Kademe | Ağırlık | Açıklama | Örnekler |
-|--------|---------|----------|---------|
-| **Tier 0 (PRIMARY)** | 3 | Wire servisler — en yüksek güvenilirlik | Reuters, AP, AFP, BBC |
-| **Tier 1 (MAJOR)** | 2 | Büyük yayıncılar — yüksek güvenilirlik | Bloomberg, WSJ, FT, NYT, Guardian |
-| **Tier 2 (SPECIALIZED)** | 1 | Uzman yayıncılar — orta-yüksek | Nature, MIT Tech Review, Wired |
-| **Tier TR** | 1-2 | Türkçe kaynaklar | AA (1), BBC Türkçe (2), Euronews TR (2), T24 (1) |
-
-### 3.2 35 Kaynak Listesi
-
-Toplam 35 kaynak tanımlıdır:
-
-**Tier 0 (5):** Reuters, AP, AFP, BBC, Reuters Investigates
-
-**Tier 1 (15):** Bloomberg, WSJ, FT, Guardian, NYT, Washington Post, Al Jazeera, NPR, Economist, CNBC, NYT Tech, WaPo Tech + **Türkçe:** AA, BBC Türkçe, Euronews TR, Deutsche Welle TR, Bloomberg HT
-
-**Tier 2 (15+):** Nature, MIT Tech Review, The Verge, Wired, HBR, ScienceDaily + **Türkçe:** T24, Medyascope, Gazete Duvar, Diken, BirGün, Sözcü, Cumhuriyet, Hürriyet, Webrazzi
-
-### 3.3 Çapraz Dil Desteği (EN/TR)
-
-Sistem, İngilizce ve Türkçe haberleri ortak anahtar kelimelerle kümeler:
-
-```
-"interest rate" = "faiz" → "interest-rate"
-"earthquake" = "deprem" → "earthquake"
-"election" = "seçim" → "election"
-"inflation" = "enflasyon" → "inflation"
-"announced" = "açıkladı" → "announced"
+    @property
+    def tier_name(self) -> str:
+        return self.tier.confidence_label
 ```
 
-30+ ortak terim ile İngilizce Reuters haberi ile Türkçe BBC haberi aynı kümeye düşer.
+```python
+@dataclass
+class FetchedNewsItem:
+    """RSS'den çekilen tek bir haber öğesi."""
+    title: str                   # Başlık
+    url: str                     # Haber URL'si
+    source_name: str             # Kaynak adı (örn: "Reuters")
+    source_tier: SourceTier      # Kaynağın güven kademesi
+    published: str               # Yayın tarihi (ham metin)
+    summary: str                 # Özet/description (max 300 karakter)
+    category: str                # Kategori
+    guid: str = ""               # RSS GUID (deduplikasyon için)
+```
+
+```python
+@dataclass
+class FactClaim:
+    """Bir haberden çıkarılan tek bir iddia/factoid."""
+    claim_text: str             # İddia metni
+    source_name: str            # Hangi kaynak bildirdi
+    source_url: str             # Kaynağın URL'si
+    source_tier: SourceTier     # Kaynağın güven kademesi
+    verified_by: List[str]     # Teyit eden diğer kaynaklar
+    discrepancies: List[str]   # Çelişen raporlar
+    is_verified: bool           # 2+ kaynak tarafından doğrulandı mı?
+    verification_level: str     # confirmed / single_source / unverified
+```
+
+```python
+@dataclass
+class CrossVerificationResult:
+    """Bir haber kümesinin çapraz doğrulama sonucu."""
+    story_title: str
+    slug: str
+    claims: List[FactClaim]
+    sources_checked: List[str]
+    sources_agreed: List[str]
+    sources_disagreed: List[str]
+    verification_level: VerificationLevel
+    verified_claims: int
+    total_claims: int
+    discrepancies_found: List[str]
+    report: str                  # İnsan tarafından okunabilir rapor
+
+    @property
+    def is_safe_to_publish(self) -> bool:
+        """Yayın eşiği kontrolü."""
+        return self.verification_level.value >= CONFIG["min_verification_level"]  # ≥ 1
+```
+
+### 2.2 Enum'lar
+
+```python
+class SourceTier(Enum):
+    """Kaynak güvenilirlik kademeleri."""
+    PRIMARY = 0           # Reuters, AP, AFP, BBC
+    MAJOR = 1             # Bloomberg, WSJ, FT, Guardian, NYT...
+    SPECIALIZED = 2       # Nature, MIT Tech Review, The Verge...
+    SUPPLEMENTARY = 3     # (henüz eklenmemiş)
+
+    @property
+    def weight(self) -> int:
+        """Doğrulama skorlamasında kullanılan ağırlık."""
+        return {0: 3, 1: 2, 2: 1, 3: 1}[self.value]
+```
+
+```python
+class VerificationLevel(Enum):
+    """Çapraz doğrulama güven seviyeleri."""
+    CONFIRMED = 3         # 2+ Tier 0 kaynak → en yüksek güven
+    HIGH_CONFIDENCE = 2   # 1 Tier 0 + 1+ Tier 1
+    MEDIUM_CONFIDENCE = 1 # 2+ Tier 1 kaynak
+    LOW_CONFIDENCE = 0    # Tek kaynak / Tier 2+ only
+    UNVERIFIED = -1       # Doğrulanamaz → yayın engeli
+
+    @property
+    def can_publish(self) -> bool:
+        return self.value >= CONFIG["min_verification_level"]  # ≥ 1
+```
+
+### 2.3 RunState (State Cache)
+
+```python
+@dataclass
+class RunState:
+    """Her run'ın state bilgisi. JSON cache'te tutulur."""
+    slug: str
+    title: str = ""
+    state: str = "captured"         # 18-state lifecycle
+    route: str = "VERIFIED"
+    format: str = "Haber Bülteni"
+    pillar: str = "Genel Haber"
+    created: str = ""
+    updated: str = ""
+    source_type: str = "multi-source"
+    verification_level: str = "unverified"
+```
 
 ---
 
-## 4. Çapraz Doğrulama Motoru
+## 3. Kurulum ve Yapılandırma
 
-### 4.1 Doğrulama Seviyeleri
+### 3.1 Ön Koşullar
 
-| Seviye | Değer | Koşul | Otomatik Yayın? |
-|--------|-------|-------|----------------|
-| ✅ **CONFIRMED** | 3 | 2+ farklı Tier 0 kaynak | ✅ Evet |
-| 🟡 **HIGH CONFIDENCE** | 2 | 1 Tier 0 + 1 Tier 1 | ✅ Evet |
-| 🟠 **MEDIUM CONFIDENCE** | 1 | 2+ Tier 1 | ⚠️ İnsan önerilir |
-| 🔴 **LOW CONFIDENCE** | 0 | Tek kaynak / sadece Tier 2+ | ❌ Hayır |
-| ⛔ **UNVERIFIED** | -1 | Doğrulanamaz | ❌ Bloke |
+| Bileşen | Gereksinim |
+|---------|------------|
+| Hermes Agent | v2.x+ (plugin sistemi ile) |
+| Python | 3.9+ (3.11 önerilen) |
+| Memos hesabı | API token ile |
+| Paketler | rich (CLI çıktıları için) |
+| İnternet | RSS beslemelerine erişim (TCP 80/443) |
 
-### 4.2 İddia Çıkarımı
-
-Cross-verification, RSS özetlerinden otomatik olarak iddiaları çıkarır:
-
-- **Proper noun çıkarımı:** Büyük harfli isimler (Trump, Beijing, Taiwan, Ebola)
-- **Sayısal veri:** Yüzdeler, miktarlar, yıllar
-- **Aksiyon fiilleri:** announced, launched, reported, confirmed, killed
-
-Aynı iddia 2+ kaynakta geçiyorsa **"verified"** olarak işaretlenir.
-
-### 4.3 Sayısal Tutarsızlık Tespiti
-
-Farklı kaynaklar aynı konuda farklı rakam veriyorsa (örn: "65 ölü" vs "80 ölü"), sistem bunu tespit eder ve doğrulama seviyesini bir kademe düşürür.
-
----
-
-## 5. Writer Agent — Otomatik Haber Üretimi
-
-### 5.1 Nasıl Çalışır?
-
-Writer Agent (`writer_agent.py`) doğrulanmış haber kümelerini alır ve Türkçe haber metni üretir:
-
-1. **Haber başlığını alır** — En yüksek kademeli kaynaktan
-2. **Kaynak listesini oluşturur** — Tüm bildiren kaynaklar
-3. **Doğrulama seviyesini ekler** — Kaç kaynak, hangi kademeler
-4. **Türkçe haber metni yazar** — [Özet] - [Detaylar] - [Kaynak] formatında
-5. **Memos'a gönderir** — API üzerinden yayınlar
-
-### 5.2 Çıktı Formatı
-
-```markdown
-[Özet] Trump, Tayvan'a yönelik silah satışlarını Çin ile yürüttüğü
-müzakerelerde "çok iyi bir pazarlık kozu" olarak kullandığını
-belirterek, ABD'nin bölgedeki geleneksel politikasında stratejik
-bir değişime gitti.
-
-[Detaylar]
-- Bu haber, 5 bağımsız kaynak tarafından teyit edildi.
-- Başlıca kaynaklar: Associated Press (AP), BBC News, CNBC.
-- Haber, 2 farklı haber ajansı (Tier 0) tarafından doğrulandı.
-- ...
-
-[Kaynak]
-- AP: nytimes.com/world/asia
-- BBC News: bbc.com/news/articles
-- CNBC: cnbc.com/2026/05/15/trump-china-xi-taiwan
-
-#Haber #DoğrulanmışHaber #Gündem
-```
-
-### 5.3 Kullanım
+### 3.2 Kurulum Adımları
 
 ```bash
-# Writer Agent ile otomatik yayın
-python3 writer_agent.py --limit 5
+# 1. Plugin'in etkin olduğunu kontrol et
+hermes plugins list
+# → haber-kurator enabled olarak görünmeli
 
-# Sadece belirli kategoriler
-python3 writer_agent.py --limit 3 --category technology
-python3 writer_agent.py --limit 3 --category business
+# 2. Memos kimlik bilgilerini ayarla
+# İki yöntemden biri:
+echo 'MEMOS_TOKEN=your_memos_token' >> ~/.hermes/.env
+echo 'MEMOS_API_URL=https://memos.googig.cloud/api/v1/memos' >> ~/.hermes/.env
 
-# Hermes CLI üzerinden
-hermes haber auto-publish --limit 5
-hermes haber auto-publish --limit 3 --category science
+# Veya plugin dizinine .env dosyası:
+# plugins/haber-kurator/.env
 
-# Slash komut
-/haber auto-publish 5
-```
-
----
-
-## 6. 19-State Lifecycle
-
-Her haber içerik objesi 19 state'ten geçer:
-
-```
-captured → fact_checking → cross_verified → idea_review → brief_ready
-→ drafting → verification → draft_review → approved → scheduler_ready
-→ scheduled → published → feedback_24h → feedback_72h → learned
-→ [correction_needed → corrected / retracted] → archived
-```
-
-### State Detayları
-
-| State | Ne Anlama Gelir | Ne Yapılır |
-|-------|----------------|-----------|
-| **captured** | Haber sisteme ilk kez girdi | fetch veya manuel |
-| **fact_checking** | 🔄 Çapraz doğrulama devam ediyor | Bekle |
-| **cross_verified** | ✅ Haber doğrulandı | Brief yazılabilir |
-| **idea_review** | Rota kararı verildi | brief.md hazırlanır |
-| **brief_ready** | Writer Context Packet yazıldı | Draft'a geç |
-| **drafting** | Haber metni yazıldı | Verifier çalıştır |
-| **verification** | Doğrulama kontrolü yapıldı | İncele |
-| **draft_review** | İnsan onayı bekleniyor | APPROVE/REVISE/REJECT |
-| **approved** | Yayın onayı verildi | Scheduler'a hazırla |
-| **scheduler_ready** | Yayına hazır | Memos'a gönder |
-| **scheduled** | Zamanlandı | Yayınlanmasını bekle |
-| **published** | 🎉 Yayında! | 24s metrik bekle |
-| **feedback_24h** | İlk metrikler toplandı | 72s bekle |
-| **feedback_72h** | Derin analiz yapıldı | Öğrenim çıkar |
-| **learned** | Öğrenimler kaydedildi | Arşivle |
-| **correction_needed** | 🔄 Hata tespit edildi | Düzeltme yaz |
-| **corrected** | Düzeltme yayınlandı | Learned'e geç |
-| **retracted** | Haber geri çekildi | Arşivle |
-| **archived** | 📦 Arşivlendi | — |
-
----
-
-## 7. Kalite Kontrolleri
-
-### 7.1 Slop Taraması
-
-**122 regex pattern** ile AI içerik kokusu tespiti:
-
-| Tier | Adet | Eşik (REVISE) | Eşik (REJECT) | Örnekler |
-|------|------|--------------|--------------|----------|
-| 🔴 **Tier 1** | 45 | ≥1 | ≥3 | "groundbreaking", "game-changing", "experts believe", "actually" |
-| 🟡 **Tier 2** | 32 | ≥3 | ≥5 | "serves as", "leveraging", "let's dive in" |
-| 🟢 **Tier 3** | 31 | ≥8 | ≥15 | passive voice, "very", "recently" |
-| ⚪ **Bonus** | 14 | kontekst bazlı | — | "you should", "it feels like" |
-
-### 7.2 Halüsinasyon Koruması
-
-Otomatik olarak taranan unsurlar:
-
-- **Sayısal iddialar:** Kaynağı belirtilmemiş istatistikler flag'lenir
-- **Uydurma alıntılar:** Konuşmacısı belirtilmemiş alıntılar tespit edilir
-- **Spekülasyon:** "could mean", "might indicate", "raises questions" yakalanır
-- **Kaynaksız iddialar:** "experts believe", "critics say" gibi belirsiz atıflar
-
-**Türkçe destek:** "bildirdi", "açıkladı", "belirtti", "sözleriyle", "tanımladı" gibi Türkçe atıf kelimeleri tanınır.
-
----
-
-## 8. Düzeltme Workflow'u
-
-Yayın sonrası hata tespit edilirse:
-
-```bash
-# Düzeltme yayınla
-hermes haber correct <slug> "hata açıklaması" --info "doğru bilgi"
-
-# Haberi tamamen geri çek (ciddi hatalar için)
-hermes haber correct <slug> --retract
-
-# Otomatik hata tespiti (feedback'te anahtar kelime ara)
-haber_kurator_manager(action='check_correction', slug='...')
-```
-
-Düzeltme süreci:
-1. `correction.md` dosyası run klasörüne yazılır
-2. State `correction_needed` → `corrected` veya `retracted` olur
-3. Düzeltme notu ilgili Memos gönderisine eklenir
-
----
-
-## 9. Kurulum ve Yapılandırma
-
-### 9.1 Plugin Yükleme
-
-```bash
-# Plugin dosyalarını Hermes home'a kopyala
-cp -r haber-kurator /usr/local/lib/hermes-agent/plugins/haber-kurator/
-```
-
-### 9.2 Memos API Token
-
-```bash
-# .env dosyasını düzenle
-cat > ~/.hermes/plugins/haber-kurator/.env << 'EOF'
-MEMOS_TOKEN="memos_pat_xxx..."
-MEMOS_API_URL="https://memos.googig.cloud/api/v1/memos"
-EOF
-```
-
-### 9.3 İlk Kurulum
-
-```bash
-# Dizin yapısını oluştur
+# 3. Dizin yapısını oluştur
 hermes haber setup
 
-# Sistem sağlık kontrolü
+# 4. Sistem sağlık kontrolü
 hermes haber audit
-
-# Kaynakları doğrula
-hermes haber sources
+# Beklenen: "✅ Haber Kuratör v3.0.0 Audit: 0 active, 0 archived."
 ```
 
-### 9.4 Writer Agent Cronjob
+### 3.3 .env Dosya Yapısı
 
 ```bash
-# Her 2 saatte bir Writer Agent çalıştır
-cronjob create \
-  --schedule "0 */2 * * *" \
-  --name "news-auto-publisher" \
-  --prompt "Run the haber-kurator Writer Agent: auto-publish up to 5 verified news articles to Memos. Use action='auto_publish' with limit=5." \
-  --workdir "/home/asus/.hermes/plugins/haber-kurator"
+# ~/.hermes/.env veya plugins/haber-kurator/.env
+MEMOS_TOKEN=hkp_xxxxxxxxxxxxxxxxxxxxxx
+MEMOS_API_URL=https://memos.googig.cloud/api/v1/memos
 ```
 
----
+**Önemli:** Memos API'si `User-Agent` header'ı gerektirir. `memos_cli.py` otomatik olarak `"Haber-Kuratör/3.0.0"` ekler.
 
-## 10. Komut Referansı
+### 3.4 Dizin Yapısı ve Setup
 
-### 10.1 CLI (`hermes haber ...`)
-
-| Komut | Açıklama |
-|-------|----------|
-| `fetch [--category]` | 📡 Tüm 35 kaynaktan haber çek |
-| `verify [--category] [--limit]` | 🔍 Kümele + çapraz doğrula |
-| `publish [--category] [--limit] [--auto]` | 📰 Doğrulanan haberleri sisteme al |
-| `auto-publish [--limit] [--category]` | 🤖 Writer Agent: otomatik haber üret + Memos'a yayınla |
-| `post <slug>` | 📤 Draft'ı Memos'ta yayınla |
-| `correct <slug> <hata> [--info] [--retract]` | ✏️ Düzeltme veya geri çekme yayınla |
-| `hallucination <slug>` | 🔬 Halüsinasyon kontrolü |
-| `scan <slug>` | 🔎 Slop pattern taraması |
-| `score <slug>` | 📊 Rubric puanlama (0-12) |
-| `sources` | 🌍 Kaynak listesini göster |
-| `status` | 📋 Run durumlarını göster |
-| `audit` | 🔍 Sistem sağlık kontrolü |
-| `runs [--no-archive]` | 📂 Tüm run'ları listele |
-| `search <query>` | 🔎 Run içeriklerinde ara |
-| `new <idea> [--source]` | 🆕 Yeni run oluştur |
-| `route <idea> [--source]` | 🗺️ Rota belirle |
-| `state [slug] [--set]` | 🔁 State görüntüle/güncelle |
-| `brief <slug>` | 📝 Brief hazırla |
-| `draft <slug>` | ✍️ Draft hazırla |
-| `verify-draft <slug>` | 🔍 Draft'ı doğrula |
-| `signal [x\|rss]` | 📶 Sinyal tara |
-| `postmortem <slug>` | 📊 Yayın analizi |
-| `learnings [--topic]` | 📝 Öğrenimleri göster |
-| `patterns` | 📊 Pattern analizi |
-| `archive <slug>` | 📦 Run'ı arşivle |
-| `context <slug>` | 📄 Run bağlamını göster |
-| `voice-update` | 🗣️ Üslup profilini göster |
-| `setup` | 🚀 İlk kurulum |
-
-### 10.2 Slash Komutları (`/haber ...`)
-
-| Komut | Açıklama |
-|-------|----------|
-| `fetch` | 📡 Haber çek |
-| `verify` | 🔍 Çapraz doğrula |
-| `publish [N] [kategori] [--auto]` | 📰 Haberleri sisteme al |
-| `auto-publish [N]` | 🤖 Writer Agent ile otomatik yayınla |
-| `post <slug>` | 📤 Memos'ta yayınla |
-| `correct <slug>` | ✏️ Düzeltme |
-| `hallucination <slug>` | 🔬 Halüsinasyon kontrolü |
-| `scan <slug>` | 🔎 Slop tara |
-| `score <slug>` | 📊 Rubric puanla |
-| `sources` | 🌍 Kaynak listesi |
-| `status` | 📋 Run durumu |
-| `audit` | 🔍 Sistem sağlığı |
-| `runs` | 📂 Tüm runlar |
-| `search <query>` | 🔎 Run ara |
-| `new <idea>` | 🆕 Yeni run |
-| `route <idea>` | 🗺️ Rota belirle |
-| `state [slug]` | 🔁 State gör |
-| `brief <slug>` | 📝 Brief hazırla |
-| `draft <slug>` | ✍️ Draft hazırla |
-| `verify-draft <slug>` | 🔍 Draft'ı doğrula |
-| `signal [x\|rss]` | 📶 Sinyal tara |
-| `postmortem <slug>` | 📊 Yayın analizi |
-| `context <slug>` | 📄 Run bağlamı |
-| `setup` | 🚀 İlk kurulum |
-| `archive <slug>` | 📦 Arşivle |
-| `learnings` | 📝 Öğrenimler |
-| `patterns` | 📊 Pattern analizi |
-| `voice-update` | 🗣️ Ses profilini görüntüle |
-
-### 10.3 Tool Actions (`haber_kurator_manager`)
-
-| Action | Parametreler | Açıklama |
-|--------|-------------|----------|
-| `fetch_news` | `category` | 📡 35 kaynaktan haber çek |
-| `verify_news` | `category`, `limit` | 🔍 Kümele + çapraz doğrula |
-| `publish_verified` | `category`, `limit`, `human_review` | 📰 Doğrulanan haberleri sisteme al |
-| `auto_publish` | `limit`, `category` | 🤖 Writer Agent ile otomatik yayınla |
-| `cross_verify_story` | `cluster_data` | ✅ Tek küme çapraz doğrula |
-| `hallucination_check` | `slug` | 🔬 Halüsinasyon tara |
-| `issue_correction` | `slug`, `error_description`, `correct_information`, `retract` | ✏️ Düzeltme yayınla |
-| `check_correction` | `slug` | 🔍 Hata kontrolü |
-| `scan_slop` | `text` | 🔎 Slop tara |
-| `score` | `slug` | 📊 Rubric puanla |
-| `sources` | — | 🌍 Kaynak listesi |
-| `list` | `include_archived` | 📂 Run'ları listele |
-| `new_run` | `idea`, `slug`, `source_hint` | 🆕 Yeni run oluştur |
-| `update_state` | `slug`, `state` | 🔁 State güncelle |
-| `get_state` | `slug` | 🔍 State görüntüle |
-| `decide_route` | `idea`, `source_hint` | 🗺️ Rota belirle |
-| `search_runs` | `query` | 🔎 Run ara |
-| `archive_run` | `slug` | 📦 Arşivle |
-| `postmortem` | `slug`, `metrics` | 📊 Yayın analizi |
-| `generate_brief` | `slug`, `extra_context` | 📝 Brief oluştur |
-| `generate_draft` | `slug` | ✍️ Draft oluştur |
-| `run_verifier` | `slug` | 🔍 Verifier çalıştır |
-| `signal` | `source` | 📶 Sinyal tara |
-| `update_voice` | `updates` | 🗣️ Ses profili güncelle |
-| `get_learnings` | `topic` | 📝 Öğrenimleri getir |
-| `analyze_patterns` | — | 📊 Pattern analizi |
-| `setup` | — | 🚀 İlk kurulum |
-| `audit` | — | 🔍 Sistem sağlığı |
-
-### Retriever Actions (`haber_kurator_retriever`)
-
-| Action | Parametreler | Açıklama |
-|--------|-------------|----------|
-| `sources` | — | Tüm kaynakların listesi |
-| `source_summary` | — | Kaynak özeti (kademeler) |
-| `strategy` | — | Strateji dosyaları |
-| `voice` | — | Ses profili + slop pattern |
-| `run` | `slug` | Run dosyaları |
-| `stores` | — | Depo dosyaları |
-| `learnings` | `topic` | Öğrenimler |
-
----
-
-## 11. Proje Yapısı
+`hermes haber setup` komutu şu dizinleri oluşturur:
 
 ```
 haber-kurator/
-│
-├── haber_kurator_core.py         ⭐ Ana motor (3649+ satır)
-│   ├── SourceTier (Enum)         Kaynak güvenilirlik kademeleri
-│   ├── VerificationLevel (Enum)  Doğrulama seviyeleri
-│   ├── FactClaim                 İddia doğrulama sınıfı
-│   ├── CrossVerificationResult   Çapraz doğrulama sonucu
-│   ├── HaberKuratorCore          Ana sınıf (tüm iş mantığı)
-│   │   ├── fetch_all_news()      Haber çekme
-│   │   ├── cluster_stories()     Kümeleme (EN/TR)
-│   │   ├── cross_verify_story()  Çapraz doğrulama
-│   │   ├── create_news_run()     Run oluşturma
-│   │   ├── publish_verified_news() Otomatik yayın
-│   │   ├── hallucination_check() Halüsinasyon tespiti
-│   │   ├── issue_correction()    Düzeltme
-│   │   ├── scan_slop()           Slop taraması
-│   │   └── ... (40+ metod)
-│   └── NEWS_SOURCES              35 kaynak tanımı
-│
-├── writer_agent.py               🤖 Writer Agent
-│   ├── WriterAgent               Otomatik haber üretimi + yayın
-│   │   ├── generate_news()       Türkçe haber metni yaz
-│   │   ├── post_to_memos()       Memos API çağrısı
-│   │   └── auto_publish()        Uçtan uca pipeline
-│   └── main()                    CLI entry point
-│
-├── memos_cli.py                  📤 Memos API istemcisi
-│   └── post_memo()               POST /api/v1/memos
-│
-├── __init__.py                   🔌 Plugin kayıt
-│   ├── register()                Tool/Slash/CLI/Hook kaydı
-│   ├── haber_kurator_manager     Tool (30+ action)
-│   ├── haber_kurator_retriever   Bilgi alma tool'u
-│   └── memos_publisher           Yayın tool'u
-│
-├── cli.py                        📋 CLI komut ağacı
-│   └── register_cli()            25+ komut
-│
-├── plugin.yaml                   Plugin manifest
-├── SKILL.md                      Skill tanımı
-├── README.md                     Bu dosya
-│
-├── strategy/
-│   ├── source-watchlist.md       📡 35 kaynak (Tier 0-3)
-│   ├── positioning.md            🎯 Konumlandırma
-│   ├── audience.md               👥 Hedef kitle
-│   └── pillars.md                📚 İçerik konuları
-│
-├── voice/
-│   ├── voice-profile.md          🗣️ Üslup kuralları
-│   └── master-avoid-slop.md      🚫 122 slop pattern
-│
-├── runs/
-│   ├── active/{slug}/            📂 Aktif haberler
-│   │   ├── haber-object.md       ID, state, route, verification
-│   │   ├── idea.md               Kaynak listesi + rota
-│   │   ├── fact-check-report.md  Çapraz doğrulama raporu
-│   │   ├── context.md            Yazar bağlamı
-│   │   ├── brief.md              Writer Context Packet
-│   │   ├── draft-package.md      Haber metni
-│   │   └── correction.md         Düzeltme (varsa)
-│   └── archive/                  📦 Arşiv
-│
-├── stores/
-│   ├── inbox.md                  Ham fikirler
-│   ├── ideas/                    Olgunlaşmış fikirler
-│   ├── hooks/                    Hook pattern'leri
-│   ├── proof/                    Kanıtlar
-│   └── feedback/                 Geri bildirimler
-│
-├── workflows/
-│   ├── idea-to-published-post.md Ana workflow
-│   ├── verifier-checklist.md     Verifier kontrol listesi
-│   └── ...
-│
-├── references/                   Referans dokümanlar
-└── .env                          🔑 Memos API token
+├── runs/active/          ← Aktif haber run'ları
+├── runs/archive/         ← Arşivlenmiş run'lar
+├── .state_cache/         ← State cache JSON dosyası
+├── strategy/             ← İnsan tarafından doldurulacak
+├── voice/                ← İnsan tarafından doldurulacak
+├── stores/               ← İnsan tarafından doldurulacak
+│   ├── ideas/
+│   ├── hooks/
+│   ├── proof/
+│   └── feedback/
+```
+
+`hermes haber audit` komutu şunları kontrol eder:
+
+| Kontrol | Ne Denetlenir |
+|---------|---------------|
+| ✅ Kritik dizinler | strategy, voice, stores, runs, workflows var mı? |
+| ✅ Store alt dizinleri | ideas, hooks, proof, feedback var mı? |
+| ⚠️ Strateji dosyaları | positioning.md, audience.md, pillars.md var mı? (opsiyonel) |
+| ✅ Kaynak sayısı | Toplam kaynak, Tier 0, Tier 1 sayıları |
+| ✅ Run sayısı | Aktif ve arşivlenmiş run sayıları |
+
+---
+
+## 4. Uçtan Uca Çalışma Döngüsü
+
+### ══════════════════════════════════════════════════════════
+### AŞAMA 1: Haber Toplama (fetch_all_news)
+### ══════════════════════════════════════════════════════════
+
+**Python metodu:** `HaberKuratorCore.fetch_all_news(category: str = None) → List[FetchedNewsItem]`
+
+**CLI:** `hermes haber fetch [--category news|technology|business|science] [--limit N]`
+
+#### İç Çalışma Algoritması
+
+```
+fetch_all_news(category=None):
+1. Filtreleme:
+   - Eğer category verilmişse: sadece o kategorideki kaynakları kullan
+   - Verilmemişse: tüm kaynaklar
+   
+2. RSS Çekme (paralel olmayan sıralı):
+   for each source in filtered_sources:
+       for each feed_url in source.rss_feeds:
+           GET feed_url
+           timeout=5sn
+           if hata: log + atla, sonraki kaynağa geç
+           
+3. XML Çözümleme:
+   if RSS 2.0 (//item):
+       title = item.findtext("title")
+       link = item.findtext("link")
+       pubDate = item.findtext("pubDate")
+       description = item.findtext("description")
+       guid = item.findtext("guid")
+   elif Atom (//entry):
+       title = entry.find("title").text
+       link = entry.find("link").get("href")
+       published = entry.find("published").text
+       summary = entry.find("summary").text
+       
+4. Deduplikasyon:
+   - URL bazında: aynı URL daha önce görüldüyse atla
+   - Başlık bazında: normalize edilmiş başlık (lowercase + noktalama temiz) daha önce görüldüyse atla
+   
+5. Promosyon Filtreleme:
+   - (?:discount|promo|code|coupon|voucher|save\s+\d+%|...)
+   - Başlıkta bu pattern'ler varsa atla
+   
+6. Dönüş: FetchedNewsItem listesi
+```
+
+#### RSS Zaman Aşımı ve Hata Yönetimi
+
+- Her besleme için `timeout=5` saniye (`CONFIG["rss_timeout"]`)
+- XML Parse Hatası (`ET.ParseError`): atlanır, loglanır
+- Ağ Hatası (`urllib.error.URLError`, `HTTPError`): atlanır, loglanır
+- **Tüm kaynaklar hata verirse:** boş liste döner, hata yükseltilmez
+- Hata sayısı `logger.info` ile raporlanır
+
+### ══════════════════════════════════════════════════════════
+### AŞAMA 2: Kümeleme (cluster_stories)
+### ══════════════════════════════════════════════════════════
+
+**Python metodu:** `HaberKuratorCore.cluster_stories(items) → List[Dict]`
+
+Bu adım detayları için [Bölüm 7 — Kümeleme ve Çapraz Dil Desteği]'ne bakın.
+
+### ══════════════════════════════════════════════════════════
+### AŞAMA 3: Çapraz Doğrulama (cross_verify_story)
+### ══════════════════════════════════════════════════════════
+
+**Python metodu:** `HaberKuratorCore.cross_verify_story(cluster) → CrossVerificationResult`
+
+**CLI:** `hermes haber verify [--category ...] [--limit N]`
+
+Bu adım detayları için [Bölüm 6 — Çapraz Doğrulama Algoritması]'na bakın.
+
+### ══════════════════════════════════════════════════════════
+### AŞAMA 4: News Run Oluşturma (publish_verified_news)
+### ══════════════════════════════════════════════════════════
+
+**Python metodu:** `HaberKuratorCore.publish_verified_news(cluster, human_review=True) → Dict`
+
+**CLI:** `hermes haber publish [--category ...] [--limit N] [--auto]`
+
+#### Adım Adım
+
+```
+publish_verified_news(cluster, human_review=True):
+1. create_news_run(cluster):
+   a. cross_verify_story(cluster) → verification sonucu
+   b. runs/active/{slug}/ klasörünü oluştur
+   c. haber-object.md yaz:
+      - ID, Created, Status=cross_verified/captured
+      - Route=VERIFIED (güvenli) veya REWRITE (düşük güven)
+      - Title, Verification Level, Verified Sources
+   d. idea.md yaz:
+      - Story, Best Source URL
+      - Tüm kaynaklar: [tier] source_name — URL
+   e. fact-check-report.md yaz:
+      - Verification seviyesi, source sayıları
+      - İddia bazında doğrulama durumu
+      - Varsa tutarsızlıklar
+   f. context.md yaz:
+      - Writer için kaynak özeti + verification özeti
+      - Voice profile summary
+   g. State cache'e ekle
+   
+2. Eğer zaten varsa: {"status": "exists"} dön
+
+3. Eğer verification_level ≥ 2 ve human_review=False:
+   - State otomatik: captured → idea_review → brief_ready
+   - auto_advanced = True
+```
+
+#### haber-object.md Formatı
+
+```markdown
+# Haber Nesnesi — 2026-05-israel-says-it-killed-hamas-s-top-leader-in-gaza
+
+## Meta
+- **ID:** 2026-05-israel-says-it-killed-hamas-s-top-leader-in-gaza
+- **Created:** 2026-05-16T15:28:59.322940
+- **Status:** cross_verified
+- **Route:** VERIFIED
+- **Source Type:** multi-source
+- **Format:** Haber Bülteni
+- **Pillar:** news
+- **Title:** Israel Says It Killed Hamas's Top Leader in Gaza
+- **Verification Level:** 3
+- **Verified Sources:** 3
+
+state: cross_verified
+updated: 2026-05-16T15:37:16.092810
+```
+
+#### fact-check-report.md Formatı
+
+```markdown
+# Cross-Verification Report: Israel Says It Killed Hamas's Top Leader in Gaza
+
+**Verification Level:** ✅ CONFIRMED — Multiple primary sources
+**Total Sources:** 3
+**Primary Sources:** 2
+**Major Sources:** 1
+**Weighted Score:** 8
+**Claims Extracted:** 28
+**Claims Verified (2+ sources):** 5
+
+### Sources Reporting
+  • [PRIMARY — Wire Service] Associated Press (AP) — https://...
+  • [PRIMARY — Wire Service] BBC News — https://...
+  • [MAJOR — Major Outlet] NPR — https://...
+
+### Tier Breakdown
+  • Tier 0 (Primary): 2
+  • Tier 1 (Major): 1
+
+### Claim Verification
+  ✅ gaza — confirmed by 3 sources
+  ✅ hamas — confirmed by 3 sources
+  ⚠️ israel says — only from Associated Press (AP)
+
+### Verdict
+⚠️ Sources use different headlines — may indicate different angles.
+✅ PASS — Meets minimum verification threshold (level 1).
+```
+
+### ══════════════════════════════════════════════════════════
+### AŞAMA 5: Brief Hazırlığı
+### ══════════════════════════════════════════════════════════
+
+**CLI:** `hermes haber brief {slug}` veya `hermes haber brief {slug} --llm`
+
+Brief (Writer Context Packet), Writer Agent'ın kullanacağı TEK bilgi kaynağıdır.
+İçinde thesis, key facts, source list, constraints ve rubric hedefleri bulunur.
+
+```
+Brief oluşturma algoritması:
+1. haber-object.md'den oku: Title, Verification Level, Source Count
+2. idea.md'den oku: Kaynak listesi (name → URL)
+3. fact-check-report.md'den oku: Doğrulama detayları
+4. context.md'den oku: Writer context
+5. brief.md oluştur:
+   # Writer Context Packet — {slug}
+   ## Meta
+   ## Thesis
+   ## Key Facts
+   ## Source List
+   ## Constraints
+   ## Rubric Targets
+6. State: brief_ready
+```
+
+`--llm` ile: Hermes auxiliary LLM kullanarak kaynaklardan otomatik brief oluşturulur.
+LLM yoksa veya hata alınırsa template-based brief'e düşer.
+
+### ══════════════════════════════════════════════════════════
+### AŞAMA 6: Taslak Yazımı (Drafting)
+### ══════════════════════════════════════════════════════════
+
+**CLI:** `hermes haber draft {slug}` veya `hermes haber draft {slug} --llm`
+
+```
+Draft oluşturma algoritması:
+1. brief.md'yi oku
+2. draft-package.md oluştur:
+   ---
+   draft:
+   [Özet] Tek cümle haber özeti
+   
+   [Detaylar]
+   - Doğrulanmış bilgi maddeleri
+   - Her madde kaynak atıflı
+   
+   [Kaynak]
+   - Kaynak Adı: URL
+   
+   rubric_self_assessment: (opsiyonel)
+   avoid_slop_pass:
+   voice_check:
+   source_attribution_check:
+3. State: drafting
+```
+
+`--llm` ile: brief'teki Thesis/Source List/Constraints'i kullanarak LLM'e haber metni yazdırılır.
+**Halüsinasyon koruması:** LLM prompt'unda "CRITICAL: Only use facts from the brief. Do NOT add any information not in the brief." talimatı vardır.
+
+### ══════════════════════════════════════════════════════════
+### AŞAMA 7: Taslak Doğrulama
+### ══════════════════════════════════════════════════════════
+
+**CLI:** `hermes haber verify-draft {slug}`
+
+İki aşamalı denetim:
+
+1. **Halüsinasyon Taraması** (`hallucination_check()`):
+   - 4 pattern: kaynaksız istatistik, spekülatif dil, sahipsiz alıntı, muğlak atıf
+   - URL'lerdeki sayılar false positive olarak algılanmaz (özel filtre)
+
+2. **Slop Taraması** (`scan_slop()`):
+   - 54+ kalıp, 4 kademe
+   - Detaylar için [Bölüm 9]'a bakın
+
+Sonuç: `verifier-report.md` yazılır, state `verification`
+
+### ══════════════════════════════════════════════════════════
+### AŞAMA 8: Yayın (Publishing)
+### ══════════════════════════════════════════════════════════
+
+**CLI:** `hermes haber post {slug}`
+
+```
+post_memo() algoritması:
+1. draft-package.md'yi oku
+2. draft: bölümünü ayıkla (rubric_self_assessment öncesi)
+3. Memos API'sine POST:
+   POST https://memos.googig.cloud/api/v1/memos
+   Authorization: Bearer {MEMOS_TOKEN}
+   Content-Type: application/json
+   User-Agent: Haber-Kuratör/3.0.0
+   {
+     "content": "[Özet] ... [Detaylar] ... [Kaynak] ...",
+     "visibility": "PUBLIC"
+   }
+4. State: published
+```
+
+### ══════════════════════════════════════════════════════════
+### AŞAMA 9: Writer Agent ile Otomatik Yayın
+### ══════════════════════════════════════════════════════════
+
+**CLI:** `hermes haber auto-publish [--limit N] [--category ...]`
+
+WriterAgent.auto_publish() tam otomatik pipeline:
+
+```
+auto_publish(max_articles=5, category=None):
+1. fetch_all_news(category) → haberleri çek
+2. cluster_stories(items) → kümeler
+3. Her küme için:
+   a. cross_verify_story(cluster) → doğrula
+   b. priority_score = verification_level * 1000 + source_count
+4. En yüksek priority'den başlayarak sırala
+5. Zaten var olan slug'ları atla (slug collision check)
+6. İlk N haber için:
+   a. publish_verified_news(human_review=False) → run oluştur
+   b. Template brief yaz
+   c. generate_news(cluster) → Türkçe [Özet]-[Detaylar]-[Kaynak] metni
+   d. Draft package yaz
+   e. State: drafting
+   f. post_to_memos() → Memos'a yayınla
+   g. 1 saniye bekle (rate limit)
+7. Rapor dön: {published, skipped, failed, articles[]}
+```
+
+### ══════════════════════════════════════════════════════════
+### AŞAMA 10: Post-mortem ve Arşivleme
+### ══════════════════════════════════════════════════════════
+
+**Postmortem:** `hermes haber postmortem {slug} [--impressions N] [--okunma N] [--likes N]`
+
+haber-object.md + feedback.md + correction.md okuyarak metrik tablosu gösterir.
+State'e göre bir sonraki adımı önerir.
+
+**Arşivleme:** `hermes haber archive {slug}` veya `hermes haber archive {slug} --force`
+- Normal: state `learned` olmalı
+- `--force`: her state'te arşivler
+
+---
+
+## 5. Kaynak Güvenilirlik Sistemi
+
+### 5.1 Kademe Tanımları
+
+| Kademe | Değer | Ağırlık | Tanım | Ölçüt |
+|--------|-------|---------|-------|-------|
+| **PRIMARY** | 0 | 3 | Wire servis / haber ajansı | Reuters, AP, AFP, BBC |
+| **MAJOR** | 1 | 2 | Büyük yayıncı / gazete | Bloomberg, WSJ, FT, Guardian, NYT, WaPo, NPR, Al Jazeera, Economist, CNBC |
+| **SPECIALIZED** | 2 | 1 | Uzman / niş yayıncı | Nature, MIT Tech Review, The Verge, Wired, HBR, ScienceDaily |
+| **SUPPLEMENTARY** | 3 | 1 | Yerel / bölgesel | (genişletilebilir) |
+
+### 5.2 Türkçe Kaynaklar ve Kademeleri
+
+**Tier 1 (MAJOR):**
+| Kaynak | Kategori | RSS |
+|--------|----------|-----|
+| Anadolu Ajansı (AA) | news | aa.com.tr/rss/ajansguncel.xml |
+| BBC Türkçe | news | feeds.bbci.co.uk/turkce/rss.xml |
+| Euronews Türkçe | news | tr.euronews.com/rss |
+| Deutsche Welle Türkçe | news | rss.dw.com/rdf/Turkish |
+| Bloomberg HT | business | bloomberght.com/rss |
+
+**Tier 2 (SPECIALIZED):**
+| Kaynak | Kategori | RSS |
+|--------|----------|-----|
+| T24 | news | t24.com.tr/rss |
+| Medyascope | news | medyascope.tv/feed/ |
+| Gazete Duvar | news | gazeteduvar.com.tr/rss |
+| Diken | news | diken.com.tr/feed/ |
+| BirGün | news | birgun.net/rss |
+| Sözcü | news | sozcu.com.tr/feeds-haberler |
+| Cumhuriyet | news | cumhuriyet.com.tr/rss/son_dakika.xml |
+| Hürriyet | news | rss.hurriyet.com.tr/ |
+| Webrazzi | technology | webrazzi.com/feed/ |
+
+### 5.3 Çapraz Doğrulama Kuralları (Türkiye Haberleri)
+
+| Senaryo | Minimum Doğrulama |
+|----------|------------------|
+| Uluslararası haber (Türkçe) | BBC Türkçe + Euronews TR veya 1 Tier 0 + 1 Türk kaynağı |
+| Türkiye iç politika | AA + T24/Medyascope/Diken (2 bağımsız) |
+| Ekonomi | Bloomberg HT + AA veya uluslararası Tier 1 |
+| Teknoloji | Webrazzi + uluslararası Tier 2 veya 2 Türk kaynağı |
+| Yerel haber | AA + en az 1 bağımsız Türk kaynağı |
+
+---
+
+## 6. Çapraz Doğrulama Algoritması
+
+### 6.1 Weighted Score Hesaplama
+
+Her kaynağın ağırlığı `SourceTier.weight` ile belirlenir:
+- PRIMARY = 3
+- MAJOR = 2
+- SPECIALIZED = 1
+
+```python
+# weighted_score = sum(her benzersiz kaynağın ağırlığı)
+# primary_count = Tier 0 benzersiz kaynak sayısı
+# major_count = Tier 1 benzersiz kaynak sayısı
+# total_unique = toplam benzersiz kaynak sayısı
+```
+
+### 6.2 İddia Çıkarma (Claim Extraction)
+
+Her haberin başlık + özetinden 3 tür iddia çıkarılır:
+
+1. **Büyük Harfli Özel İsimler** (NER benzeri):
+   ```
+   r'\b[A-Z][a-z]{2,}(?:\s+[A-Z][a-z]{2,}){0,3}'
+   ```
+   - Kişi adları: "Donald Trump", "Joe Biden"
+   - Kurum adları: "Associated Press", "BBC News"
+   - Yer adları: "Washington", "Gaza"
+   - Skip words: "The", "This", "That", "What"... filtrelenir
+
+2. **Sayısal Değerler:**
+   ```
+   r'\d+(?:[.,]\d+)?\s*(?:%|percent|billion|million|dollars|...)'
+   r'(?:202[0-9]|203[0-9])'  # Yıl
+   ```
+
+3. **Eylem Fiilleri:**
+   ```
+   r'(?:announced|launched|reported|confirmed|approved|killed|...)'
+   ```
+
+### 6.3 VerificationLevel Atama Mantığı
+
+```python
+if primary_count >= 2 and total_unique >= 2:
+    level = CONFIRMED          # Level 3
+elif primary_count >= 1 and major_count >= 1:
+    level = HIGH_CONFIDENCE    # Level 2
+elif major_count >= 2:
+    level = MEDIUM_CONFIDENCE  # Level 1
+elif total_unique >= 1:
+    level = LOW_CONFIDENCE     # Level 0
+else:
+    level = UNVERIFIED         # Level -1
+
+# Sayısal tutarsızlık varsa: bir kademe düşür
+if discrepancies_list and level > LOW_CONFIDENCE:
+    level = max(level - 1, LOW_CONFIDENCE)
+
+# Başlık farklılığı varsa (farklı angle): uyarı ekle
+if has_title_discrepancy:
+    report += "⚠️ Sources use different headlines"
+```
+
+### 6.4 Yayın Eşiği
+
+| Seviye | Otomatik Yayın? |
+|--------|-----------------|
+| CONFIRMED (3) | ✅ Evet (`--auto` ile veya normal) |
+| HIGH_CONFIDENCE (2) | ✅ Evet |
+| MEDIUM_CONFIDENCE (1) | ⚠️ İnsan onayı önerilir |
+| LOW_CONFIDENCE (0) | ❌ İnsan onayı ZORUNLU |
+| UNVERIFIED (-1) | ❌ YAYINLANAMAZ |
+
+---
+
+## 7. Kümeleme ve Çapraz Dil Desteği
+
+### 7.1 Normalizasyon
+
+```python
+def _cross_lingual_normalize(title: str) -> str:
+    1. Küçük harfe çevir
+    2. Noktalama işaretlerini kaldır
+    3. Türkçe karakterleri ASCII'ye çevir (ışık→isik, ç→c, ğ→g, ...)
+    4. İkili dil sözlüğünde ara:
+       - "savaş" → "war", "saldırı" → "attack"
+       - "ekonomi" → "economy", "enflasyon" → "inflation"
+       - 50+ eşleştirme kuralı
+    5. Ortak kelimeleri koru, diğerlerini olduğu gibi bırak
+    6. Boşlukla birleştir
+```
+
+### 7.2 Kümeleme Eşiği
+
+İki haber başlığı aynı kümede birleştirilir:
+- **Normal (İngilizce-İngilizce):** kelime örtüşmesi ≥ %40
+- **Çapraz dil (Türkçe-İngilizce):** kelime örtüşmesi ≥ %30
+
+```python
+overlap = len(set(norm_i_words) & set(norm_j_words))
+min_len = min(len(norm_i_words), len(norm_j_words))
+if min_len == 0: continue
+score = overlap / min_len
+if score >= 0.3:  # Aynı küme
+    cluster.append(other_item)
+```
+
+### 7.3 İkili Dil Sözlüğü (Örnek)
+
+| İngilizce | Türkçe | Normalize |
+|-----------|--------|-----------|
+| president | cumhurbaşkanı | president |
+| attack | saldırı | attack |
+| earthquake | deprem | earthquake |
+| election | seçim | election |
+| economy | ekonomi | economy |
+| technology | teknoloji | technology |
+| war | savaş | war |
+| announced | açıkladı, duyurdu | announced |
+| reported | bildirdi | reported |
+
+---
+
+## 8. Halüsinasyon Koruması
+
+### 8.1 Tespit Edilen 4 Pattern
+
+| # | Pattern | Regex | Severity | Ne kontrol eder? |
+|---|---------|-------|----------|-----------------|
+| 1 | Kaynaksız istatistik | `\$?\d+[\.\d,]*\s*(?:million\|billion\|...)` | 🔴 high | 200 karakter içinde kaynak adı var mı? |
+| 2 | Spekülatif dil | `could (?:mean\|lead to\|result in)`, `might indicate`, `raises questions` | 🟡 medium | Gelecek hakkında tahmin mi? |
+| 3 | Sahipsiz alıntı | `"([^"]{8,})"` | 🔴 high | "..." içinde konuşan adı var mı? |
+| 4 | Muğlak atıf | `it is believed that`, `many think that`, `some argue that` | 🔴 high | Kim dedi? Spesifik kaynak var mı? |
+
+### 8.2 URL Filtreleme (False Positive Koruması)
+
+Sayı içeren satırda URL varsa (`https?://`), o satırdaki tüm sayılar atlanır.
+Çünkü URL'lerdeki ID'ler (`g-s1-122453`), tarihler (`2026/05/16`) ve path segmentleri
+anlamlı istatistik değil, sadece adres bileşenidir.
+
+### 8.3 Skorlama
+
+```
+PASS: high severity bulgu = 0
+FAIL: high severity bulgu ≥ 1
 ```
 
 ---
 
-## 12. Sorun Giderme
+## 9. 54+ Slop Tespit Kalıbı
 
-### 12.1 RSS Beslemesi Çalışmıyor
+### 9.1 Kademeler
 
-```bash
-# Kaynakların durumunu kontrol et
-hermes haber sources
+| Kademe | Pattern Sayısı | REVISE Eşiği | REJECT Eşiği |
+|--------|---------------|-------------|-------------|
+| 🔴 Tier 1 (Critical) | 45 | ≥1 pattern | ≥3 pattern |
+| 🟡 Tier 2 (High) | 33 | ≥3 pattern | ≥5 pattern |
+| 🟢 Tier 3 (Medium) | 19 | ≥8 pattern | ≥15 pattern |
+| ⚪ Bonus (Tone) | 14 | Kontekst bazlı | — |
 
-# Tek kaynak testi
-python3 -c "
-from haber_kurator_core import HaberKuratorCore, NEWS_SOURCES
-from pathlib import Path
-core = HaberKuratorCore(Path('.'))
-items = core.fetch_all_news()
-print(f'{len(items)} haber çekildi')
-"
+### 9.2 Tier 1 — Sıfır Tolerans (Haber)
+
+Herhangi bir Tier 1 ihlali varsa otomatik **REVISE**:
+
+```
+1.  Promosyon/Clickbait: "groundbreaking", "game-changing"
+2.  Önem abartısı: "pivotal", "testament"
+3.  Belirsiz atıf: "experts believe", "studies show"
+4.  Kaynaksız iddia: "allegedly", "unnamed sources say"
+5.  Sahte aciliyet: "breaking:", "developing story"
+6.  Dolgu zarfları: "actually", "literally", "simply", "just"
+7.  Staccato parçalama: kısa cümle dizileri
+8.  "şok edici", "inanılmaz", "devrim niteliğinde" (Türkçe clickbait)
+9.  "bence", "bana göre", "görünen o ki" (öznel ifade)
+10. "son dakika", "gelişen haber" (yalancı aciliyet)
+... 22 pattern daha
 ```
 
-### 12.2 Memos API Hatası
+### 9.3 Tier 2 — Yüksek (3+ = REVISE)
 
-```bash
-# Token ve URL kontrolü
-cat .env
-
-# API testi
-curl -s "https://memos.googig.cloud/api/v1/memos" \
-  -H "Authorization: Bearer $(grep MEMOS_TOKEN .env | cut -d= -f2 | tr -d '\"')" \
-  -H "Content-Type: application/json"
+```
+1.  Copula Avoidance: "serves as", "stands as"
+2.  -ing Padding: "leveraging", "implementing"
+3.  Rule of Three Zorlama
+4.  Filler Phrases: "due to the fact that"
+5.  Generic Conclusions: "the future looks bright"
+6.  Signposting: "let's dive in", "here's what you need"
+7.  Hyperbolic Quantifiers: "every single", "never ever"
+8.  Hedging: "it could potentially", "arguably"
+... 24 pattern daha
 ```
 
-**Sık hatalar:**
-- **403 error code 1010:** Token süresi dolmuş → Memos'tan yeni token al
-- **404 Not Found:** API URL yanlış → `.env`'deki URL'yi kontrol et (/api/v1/memos olmalı)
-- **DNS çözümleme hatası:** İnternet bağlantısını kontrol et, tekrar dene
+### 9.4 Tier 3 — Orta (8+ = REVISE)
 
-### 12.3 Halüsinasyon Yanlış Alarmı
-
-Halüsinasyon kontrolü rubric skorlarını da tarıyorsa:
-
-```bash
-# Sadece haber metnini kontrol et
-python3 -c "
-from haber_kurator_core import HaberKuratorCore
-from pathlib import Path
-core = HaberKuratorCore(Path('.'))
-result = core.hallucination_check('slug')
-print(f'Bulgu: {result[\"total_findings\"]}')
-for f in result.get('findings', []):
-    print(f'  [{f[\"type\"]}] {f[\"message\"]}')
-"
 ```
-
-### 12.4 Doğrulama Seviyesi Beklenenden Düşük
-
-Eğer aynı kaynaktan gelen birden fazla haber tek kaynak sayılıyorsa:
-- 5 BBC haberi ≠ 5 farklı kaynak
-- Sadece benzersiz kaynak isimleri sayılır
-- 2 farklı Tier 0 kaynak gerekli (Reuters + AP gibi)
+1.  Passive Voice (aşırı kullanım)
+2.  Temporal Vagueness: "recently", "lately"
+3.  False Balance: "some say... while others say"
+4.  Speculation: "could potentially mean", "raises questions"
+... 29 pattern daha
+```
 
 ---
 
-*Haber Küratörü — Tarafsız Haber ve Bilgi Akışı. v3.0.0*
+## 10. Writer Agent ve Otomatik Haber Üretimi
+
+### 10.1 WriterAgent Sınıfı
+
+```python
+class WriterAgent:
+    def __init__(self, core: HaberKuratorCore):
+        self.core = core
+        self._load_env()               # .env'den MEMOS_TOKEN oku
+        self._llm = None               # Hermes LLM (opsiyonel)
+    
+    def set_llm(self, llm):           # Hermes auxiliary LLM bağla
+    def _try_translate(self, text)    # İng→Tr çeviri
+    def generate_news(self, cluster)  # [Özet]-[Detaylar]-[Kaynak] üret
+    def post_to_memos(self, content)  # Memos'a yayınla
+    def auto_publish(self, ...)       # Tam otomatik pipeline
+```
+
+### 10.2 generate_news() Algoritması
+
+```python
+generate_news(cluster):
+1. Başlık = cluster.story_title
+2. Türkçeye çevir (LLM varsa)
+3. Kategori tespiti (keywords):
+   - siyaset: trump, china, russia, president, election...
+   - sağlık: virus, health, hospital, covid, vaccine...
+   - teknoloji: ai, apple, google, microsoft, nvidia, chip...
+   - ekonomi: market, stock, economy, inflation, trade...
+   - bilim: research, study, science, nature, space...
+4. Kaynak sayısına göre Türkçe açıklama:
+   - ≥10: "{N} farklı kaynak tarafından doğrulandı"
+   - ≥5: "{N} bağımsız kaynak tarafından teyit edildi"
+   - ≥3: "{N} ayrı kaynak tarafından doğrulandı"
+   - else: "{N} kaynak tarafından doğrulandı"
+5. [Özet] bölümü: Kategori etiketi + başlık
+6. [Detaylar] bölümü:
+   - Kaynak sayısı bilgisi
+   - Başlıca kaynak isimleri (Tier 0 önce)
+   - Doğrulama seviyesi açıklaması
+   - Kategoriye özel detay
+7. [Kaynak] bölümü: İlk 8 kaynağın ismi + URL
+8. Tagler: #Haber #DoğrulanmışHaber #Gündem [+kategori]
+```
+
+### 10.3 Çıktı Formatı
+
+```markdown
+[Özet] Teknoloji: Apple yeni yapay zeka destekli iPhone'u tanıttı
+
+[Detaylar]
+- Bu haber, 5 farklı kaynak tarafından doğrulandı.
+- Başlıca kaynaklar: Reuters, Associated Press (AP), BBC News.
+- Haber, 2 haber ajansı tarafından teyit edildi (en yüksek seviye).
+
+[Kaynak]
+- Reuters: https://www.reuters.com/...
+- Associated Press (AP): https://apnews.com/...
+- BBC News: https://www.bbc.com/...
+
+#Haber #DoğrulanmışHaber #Teknoloji #Gündem
+```
+
+---
+
+## 11. 18 Aşamalı State Makinesi
+
+### 11.1 State Tanımları ve Geçişler
+
+```
+STATE_LIFECYCLE = [
+    "captured",           # Haber sisteme ilk giriş
+    "fact_checking",      # Çapraz doğrulama devam ediyor
+    "cross_verified",     # İddialar kaynaklarda doğrulandı
+    "idea_review",        # Rota kararı
+    "brief_ready",        # Writer Context Packet hazır
+    "drafting",           # Taslak yazılıyor
+    "verification",       # Denetim (halüsinasyon + slop)
+    "draft_review",       # İnsan/LLM incelemesi
+    "approved",           # Onaylandı
+    "scheduler_ready",    # Zamanlayıcıya hazır
+    "scheduled",          # Zamanlandı
+    "published",          # Memos'a yayınlandı
+    "feedback_24h",       # 24 saat metrik toplama
+    "feedback_72h",       # 72 saat derin analiz
+    "learned",            # Öğrenilen dersler çıkarıldı
+    "correction_needed",  # Hata tespit edildi
+    "corrected",          # Düzeltme yayınlandı
+    "retracted",          # Haber geri çekildi
+    "archived",           # Arşivlendi
+]
+```
+
+### 11.2 Geçiş Kuralları
+
+| Mevcut State | Geçebileceği State'ler | Açıklama |
+|--------------|------------------------|----------|
+| `captured` | `fact_checking` | Haber doğrulamaya alınır |
+| `fact_checking` | `cross_verified`, `captured` | Doğrulama tamam veya başa dön |
+| `cross_verified` | `idea_review`, `captured` | Rota kararı veya yeniden değerlendir |
+| `idea_review` | `brief_ready`, `captured` | Brief hazırlığı veya geri dönüş |
+| `brief_ready` | `drafting` | Taslak yazımı başlar |
+| `drafting` | `verification` | Taslak denetime gider |
+| `verification` | `draft_review` | Denetim raporu hazır |
+| `draft_review` | `approved`, `brief_ready`, `captured` | Onay, revizyon veya iptal |
+| `approved` | `scheduler_ready` | Zamanlamaya hazır |
+| `scheduler_ready` | `scheduled` | Zamanlandı |
+| `scheduled` | `published` | Yayınlandı |
+| `published` | `feedback_24h`, `correction_needed` | Feedback veya düzeltme |
+| `feedback_24h` | `feedback_72h`, `correction_needed` | 72h feedback veya düzeltme |
+| `feedback_72h` | `learned`, `correction_needed` | Öğren veya düzelt |
+| `learned` | `archived`, `correction_needed` | Arşivle veya düzelt |
+| `correction_needed` | `corrected`, `retracted` | Düzelt veya geri çek |
+| `corrected` | `learned` | Düzeltme sonrası öğren |
+| `retracted` | `archived` | Geri çekme sonrası arşivle |
+| `archived` | — | Terminal state |
+
+### 11.3 State Görüntüleme ve Değiştirme
+
+```bash
+# Tek run state'i
+hermes haber state haber-slug
+
+# Tüm run'ların state'leri
+hermes haber state
+
+# State değiştirme
+hermes haber state haber-slug --set draft_review
+```
+
+### 11.4 State-File Auto-Detection (sync_state)
+
+```python
+STATE_FILE_MAP = {
+    "fact_checking":     "fact-check-report.md",
+    "cross_verified":    "fact-check-report.md",
+    "correction_needed": "correction.md",
+    "corrected":         "correction.md",
+    "retracted":         "correction.md",
+    "published":         "published",
+    "verification":      "verifier-report.md",
+    "feedback_72h":      "feedback.md",
+    "feedback_24h":      "feedback.md",
+    "learned":           "feedback.md",
+    "drafting":          "draft-package.md",
+    "brief_ready":       "brief.md",
+}
+```
+
+`sync_state(slug)` dosya varlığına göre state'i otomatik algılar.
+
+---
+
+## 12. 12 Puanlık Rubrik Değerlendirme
+
+### 12.1 Kriterler
+
+| # | Kriter | 0 puan | 1 puan | 2 puan |
+|---|--------|--------|--------|--------|
+| 1 | **Tarafsızlık** | Yazar fikrini katmış ("Maalesef", "Bence") | Kısmen yönlendirme var | Tamamen objektif |
+| 2 | **Kaynak Gösterimi** | Kaynak yok veya "Uzmanlar" gibi belirsiz | İsim var ama link/net kurum eksik | Kaynak net: isim + URL |
+| 3 | **Kısalık ve Netlik** | Uzun paragraflar, laf salatası | Biraz uzun ama okunabilir | Hap bilgi, hızlı okunur |
+| 4 | **Bilgi Yoğunluğu** | Soyut kelimeler, somut veri yok | Birkaç detay var ama eksik | Sayı, tarih, kişi, kurum dolu |
+| 5 | **Clickbait Uzaklığı** | "Şok", "İnanılmaz", gizemli başlık | Hafif abartı | İçeriği dürüstçe yansıtan |
+| 6 | **Format Yapısı** | Karman çorman düz metin | Format var ama standart değil | [Özet]-[Detaylar]-[Kaynak] |
+
+### 12.2 CLI Puanlama
+
+```bash
+hermes haber score haber-slug
+```
+
+Çıktı: 5 kriter × 2 = 10 puan (format, slop, uzunluk, yoğunluk, kaynak) + self-assessment
+- ≥ 10/12: ✅ İyi, yayına hazır
+- ≥ 7/12: 🟡 Revizyon gerekli
+- < 7/12: ❌ Yeniden yazılmalı
+
+---
+
+## 13. Düzeltme ve Geri Çekme Mekanizması
+
+### 13.1 Düzeltme (Correction)
+
+```bash
+hermes haber correct {slug} "Hata açıklaması" --info "Doğru bilgi"
+```
+
+**Ne olur:**
+1. `correction.md` oluşturulur (Correction Notice)
+2. State `corrected` olarak güncellenir
+3. Orijinal haber güncellenir veya uyarı eklenir
+
+### 13.2 Geri Çekme (Retraction)
+
+```bash
+hermes haber correct {slug} "Ciddi hata" --retract
+```
+
+**Ne zaman:**
+- Haberin ana iddiası yanlış çıktıysa
+- Kaynaklar haberi yalanladıysa
+- Manipülasyon tespit edildiyse
+
+**Ne olur:**
+1. `correction.md` → `## Retraction Statement` yazılır
+2. State `retracted`
+3. Haber platformdan kaldırılır veya "RETRACTED" etiketi eklenir
+
+### 13.3 State Geçişleri
+
+```
+published → correction_needed → corrected/retracted → learned → archived
+```
+
+---
+
+## 14. Memos Yayınlama
+
+### 14.1 API İsteği
+
+```http
+POST https://memos.googig.cloud/api/v1/memos
+Authorization: Bearer {MEMOS_TOKEN}
+Content-Type: application/json
+User-Agent: Haber-Kuratör/3.0.0
+
+{
+  "content": "Haber metni...",
+  "visibility": "PUBLIC"
+}
+```
+
+### 14.2 Çevre Değişkenleri
+
+| Değişken | Varsayılan | Açıklama |
+|----------|-----------|----------|
+| `MEMOS_TOKEN` | — | Zorunlu. Memos API token'ı |
+| `MEMOS_API_URL` | `https://memos.googig.cloud/api/v1/memos` | Memos API base URL |
+
+### 14.3 .env Dosya Konumu
+
+Plugin `.env` dosyasını şu sırayla arar:
+1. `plugins/haber-kurator/.env` (plugin dizini)
+2. `~/.hermes/.env` (Hermes ana dizini)
+
+---
+
+## 15. Tam Komut Referansı
+
+### 15.1 Haber Toplama & Doğrulama
+
+| Komut | Açıklama | Örnek |
+|-------|----------|-------|
+| `hermes haber sources` | Kaynakları kademelere göre listeler | `hermes haber sources` |
+| `hermes haber fetch [--category] [--limit]` | Haber çeker + kümeler + tablo | `hermes haber fetch --category technology --limit 10` |
+| `hermes haber verify [--category] [--limit]` | Çeker + kümeler + çapraz doğrular | `hermes haber verify --category news --limit 5` |
+| `hermes haber publish [--category] [--limit] [--auto]` | Doğrulanmış haberleri run'a ekler | `hermes haber publish --auto --limit 3` |
+| `hermes haber correct <slug> <hata> [--retract] [--info]` | Düzeltme/retraction | `hermes haber correct slug "hata" --info "doğru"` |
+| `hermes haber hallucination <slug>` | Halüsinasyon taraması | `hermes haber hallucination slug` |
+
+### 15.2 Writer Agent
+
+| Komut | Açıklama | Örnek |
+|-------|----------|-------|
+| `hermes haber brief <slug> [--llm]` | Brief hazırla | `hermes haber brief slug --llm` |
+| `hermes haber draft <slug> [--llm]` | Taslak yaz | `hermes haber draft slug --llm` |
+| `hermes haber verify-draft <slug>` | Taslak denetimi | `hermes haber verify-draft slug` |
+| `hermes haber post <slug>` | Memos'a yayınla | `hermes haber post slug` |
+| `hermes haber auto-publish [--limit] [--category]` | Tam otomatik yayın | `hermes haber auto-publish --limit 5` |
+
+### 15.3 Kalite Kontrol
+
+| Komut | Açıklama |
+|-------|----------|
+| `hermes haber scan <slug>` | 54+ slop taraması |
+| `hermes haber score <slug>` | 12 puanlık rubric değerlendirmesi |
+| `hermes haber hallucination <slug>` | Halüsinasyon taraması |
+
+### 15.4 Sistem & Bilgi
+
+| Komut | Açıklama |
+|-------|----------|
+| `hermes haber setup` | Dizin yapısını başlat |
+| `hermes haber status` | Aktif run'ların state'leri |
+| `hermes haber audit` | Tam sistem denetimi |
+| `hermes haber state [slug] [--set]` | State görüntüle/değiştir |
+| `hermes haber runs [--no-archive]` | Tüm run'ları listele |
+| `hermes haber search <query>` | Run'larda ara |
+| `hermes haber context <slug>` | Run bağlamını göster |
+| `hermes haber learnings [--topic]` | Önceki run'lardan öğrenilenler |
+| `hermes haber patterns` | Run pattern analizi |
+| `hermes haber voice-update` | Ses profilini göster |
+
+### 15.5 Run Yönetimi
+
+| Komut | Açıklama | Örnek |
+|-------|----------|-------|
+| `hermes haber new <idea> [--slug] [--source]` | Yeni run (haber dışı) | `hermes haber new "fikir"` |
+| `hermes haber route <idea> [--source]` | Rota belirle | `hermes haber route "fikir" --source verified` |
+| `hermes haber postmortem <slug> [--impressions]` | Yayın sonrası analiz | `hermes haber postmortem slug --okunma 1200` |
+| `hermes haber archive <slug> [--force]` | Arşivle | `hermes haber archive slug --force` |
+| `hermes haber signal [x\|rss]` | Sinyal taraması | `hermes haber signal rss` |
+
+### 15.6 Slash Komutlar (Hermes içinde)
+
+Tüm CLI komutlarının `/haber` karşılığı vardır:
+- `/haber fetch` — fetch
+- `/haber verify` — verify
+- `/haber publish` — publish
+- `/haber status` — status
+- `/haber sources` — sources
+
+### 15.7 Doğal Dil Desteği (NLP)
+
+Doğal dil komutları **hem CLI'da hem Hermes içinde** çalışır. Sistem kelimelerden niyeti ve kategoriyi otomatik algılar:
+
+| Nerede | Örnek |
+|--------|-------|
+| **CLI** | `hermes haber teknoloji haberlerini getir` |
+| **Slash** | `/haber teknoloji haberlerini getir` |
+
+Tüm desteklenen kalıplar:
+
+| Dediğiniz | Ne Yapar |
+|-----------|----------|
+| `teknoloji haberlerini getir` | `fetch --category technology` |
+| `ekonomi haberlerini doğrula` | `verify --category business` |
+| `son dakika haberlerini yayınla` | `publish --category news` |
+| `bilim haberlerini otomatik yayınla` | `auto-publish --category science` |
+| `kaynakları listele` | `sources` |
+| `haber doğrula` | `verify` (tüm kategoriler) |
+| `haber yayınla` | `publish` (tüm kategoriler) |
+| `getir` | `fetch` (tüm kategoriler) |
+
+**Desteklenen kategoriler:** teknoloji, ekonomi/finans, bilim/araştırma, gündem, son dakika
+**Desteklenen fiiller:** getir/çek/ara (fetch), doğrula/kontrol et/teyit et (verify), yayınla/paylaş/gönder (publish), otomatik yayınla (auto-publish)
+
+---
+
+## 16. Adım Adım Örnek Senaryo
+
+### Senaryo: Teknoloji Haberi Doğrulama ve Yayınlama
+
+```bash
+# ── 1. Haberleri çek ──────────────────────────────────
+hermes haber fetch --category technology --limit 10
+
+# ── 2. En çok kaynaklı haberi detaylı doğrula ────────
+hermes haber verify --category technology --limit 3
+
+# ── 3. Güvenli haberleri run'a ekle ───────────────────
+hermes haber publish --category technology --limit 3
+
+# ── 4. Run'ları kontrol et ────────────────────────────
+hermes haber status
+
+# ── 5. Bir haber için brief oluştur (LLM ile) ────────
+hermes haber brief 2026-05-technology-slug --llm
+
+# ── 6. Taslak oluştur (LLM ile) ───────────────────────
+hermes haber draft 2026-05-technology-slug --llm
+
+# ── 7. Taslağı denetle ────────────────────────────────
+hermes haber verify-draft 2026-05-technology-slug
+
+# ── 8. Puanla ─────────────────────────────────────────
+hermes haber score 2026-05-technology-slug
+
+# ── 9. Onayla ve yayınla ──────────────────────────────
+hermes haber state 2026-05-technology-slug --set approved
+hermes haber post 2026-05-technology-slug
+
+# ── 10. Postmortem ────────────────────────────────────
+hermes haber state 2026-05-technology-slug --set feedback_24h
+hermes haber state 2026-05-technology-slug --set feedback_72h
+hermes haber state 2026-05-technology-slug --set learned
+
+# ── 11. Arşivle (state learned değilse --force ile) ──
+hermes haber archive 2026-05-technology-slug --force
+```
+
+### Otomatik Pipeline (Tek Komut)
+
+```bash
+hermes haber auto-publish --limit 5 --category news
+```
+
+Bu komut: **fetch → cluster → verify → sort → dedup → create run → brief → draft → publish** adımlarının tamamını otomatik yapar.
+
+---
+
+## 17. Sık Sorulan Sorular ve Hata Çözümleri
+
+### ❓ "Plugin 'haber_kurator' is not installed" hatası
+
+Plugin adı tire ile: `haber-kurator`, alt çizgi ile değil:
+```bash
+hermes plugins enable haber-kurator
+hermes plugins disable haber-kurator
+```
+
+### ❓ "invalid choice: 'haber'" hatası
+
+Plugin CLI komutları kayıtlı değil. İki olası neden:
+
+1. **Absolute import hatası:** `__init__.py`'deki `from haber_kurator_core import...` gibi import'lar Hermes namespace paketinde çalışmaz. Çözüm: `from .haber_kurator_core import...` (relative import).
+
+2. **Handler bağlantısı eksik:** `cli.py`'deki `register_cli()` fonksiyonu argparse ağacını kurar ama `haber_parser.set_defaults(func=handler)` çağrılmazsa komut işlenemez. Çözüm: `register_cli()` sonunda `haber_parser.set_defaults(func=handler)` eklenir.
+
+Emin değilseniz: `hermes plugins list` ile plugin'in etkin olduğunu kontrol edin, sonra `hermes haber sources` ile test edin.
+
+### ❓ RSS beslemesi çalışmazsa?
+
+- Hata alan beslemeler atlanır (log'a yazılır)
+- 5 saniye timeout (CONFIG["rss_timeout"])
+- Tüm kaynaklar hata verirse boş liste döner
+- Kaynakları kontrol et: `hermes haber sources`
+
+### ❓ "Number/statistic without clear source attribution" false positive
+
+URL'lerdeki sayılar (`g-s1-122453`) kaynaksız istatistik sanılabilir. Sistem:
+1. Sayının bulunduğu satırda URL (`https://`) var mı kontrol eder
+2. Varsa o satırdaki tüm sayısal değerleri atlar
+
+### ❓ Hallüsinasyon testi sürekli FAIL veriyor?
+
+Template-based draft kullanıyorsanız normaldir. `--llm` ile oluşturun:
+```bash
+hermes haber brief SLUG --llm
+hermes haber draft SLUG --llm
+```
+
+### ❓ Memos'a yayın başarısız?
+
+1. `MEMOS_TOKEN` ayarlı mı?
+2. API URL doğru mu? `https://memos.googig.cloud/api/v1/memos`
+3. Token'da yetki var mı? (`visibility: PUBLIC`)
+4. `.env` dosyası doğru yerde mi? (plugin dizini veya `~/.hermes/`)
+
+### ❓ "Cannot archive" hatası
+
+Run'ı arşivlemek için state `learned` olmalıdır. Zorla arşivle:
+```bash
+hermes haber archive SLUG --force
+```
+
+### ❓ State cache ile filesystem uyuşmazlığı
+
+`haber-object.md`'deki state ile `.state_cache/runs_state.json` farklı olabilir.
+Cache authoritative'dir. Sync için:
+```bash
+# Her iki kaynağı kontrol et
+grep -A1 "state:" runs/active/*/haber-object.md
+cat .state_cache/runs_state.json | python3 -m json.tool
+```
+
+### ❓ Writer Agent hangi LLM'i kullanır?
+
+Hermes auxiliary LLM (`agent.auxiliary_client.async_call_llm`).
+LLM yoksa template-based üretime düşer (orijinal başlık korunur).
+
+### ❓ Run sayısı çok arttı, performans düşer mi?
+
+- Run'lar dosya sistemi üzerinde tutulur
+- State cache SQLite JSON ile yönetilir
+- 1000+ run için optimize
+- Eski run'ları arşivleyin: `hermes haber archive SLUG`
+
+### ❓ `--auto` güvenli mi?
+
+Sadece CONFIRMED (Level 3) veya HIGH CONFIDENCE (Level 2) haberleri otomatik onaylar.
+MEDIUM/LOW haberler her zaman insan onayı gerektirir.
+
+### ❓ Kaynak nasıl eklenir?
+
+`haber_kurator_core.py` → `NEWS_SOURCES` sözlüğüne yeni bir `NewsSource` eklenir:
+
+```python
+"kaynak_adi": NewsSource(
+    name="Kaynak Adı",
+    base_url="https://...",
+    category="news",
+    tier=SourceTier.MAJOR,
+    rss_feeds=["https://...rss"],
+    language="tr",
+    country="turkey",
+    notes="Açıklama",
+),
+```
+
+---
+
+> **Haber-Kuratör v3.0.0** — Memos Küratörü
+> 35+ kaynak, 4 güven kademesi, 18 state, 54+ slop kalıbı, 12 puanlık rubric
+> 
+> **Dosya:** `plugins/haber-kurator/references/KULLANIM_KILAVUZU.md`
+> **Skill:** `hermes-agent` skill'ini yükleyip `hermes haber ...` komutlarını kullanın
