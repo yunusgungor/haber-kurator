@@ -104,12 +104,12 @@ KAYNAKLAR ──► TOPLAMA ──► KÜMELEME ──► ÇAPRAZ DOĞRULAMA ─
 
 ## 📡 Kaynak Güvenilirlik Kademeleri
 
-Sistem, her haber kaynağını 4 kademede sınıflandırır:
+Sistem, her haber kaynağını 4 kademede sınıflandırır (v3.1.0: 38 kaynak):
 
 | Kademe | Açıklama | Örnekler | Doğrulama Etkisi |
 |--------|----------|---------|------------------|
 | **Tier 0 (PRIMARY)** | Wire servisler — en yüksek güvenilirlik | Reuters, AP, AFP, BBC | 2+ Tier 0 → **CONFIRMED** (otomatik) |
-| **Tier 1 (MAJOR)** | Büyük yayıncılar | Bloomberg, WSJ, FT, NYT, Guardian, WaPo | 1 Tier 0 + 1 Tier 1 → **HIGH CONFIDENCE** |
+| **Tier 1 (MAJOR)** | Büyük yayıncılar | Bloomberg, WSJ, FT, NYT, Guardian, WaPo, CNN, NBC, Fox | 1 Tier 0 + 1 Tier 1 → **HIGH CONFIDENCE** |
 | **Tier 2 (SPECIALIZED)** | Uzman yayıncılar | Nature, MIT Tech Review, Wired | 2+ Tier 1 → **MEDIUM CONFIDENCE** |
 | **Tier 3 (SUPPLEMENTARY)** | Yerel kaynaklar | AA, Euronews TR, BBC Türkçe | Tek kaynak → **LOW CONFIDENCE** (insan onayı zorunlu) |
 

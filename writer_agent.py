@@ -30,22 +30,23 @@ class WriterAgent:
 
     def _try_translate(self, text: str) -> str:
         """Try to translate text to Turkish using Hermes LLM.
-        
-        Uses a synchronous call to the Hermes auxiliary LLM.
+
+        Uses Hermes auxiliary LLM via a clean async wrapper.
         Falls back to original text if LLM is unavailable.
+        Thread-safe: runs async LLM call in a dedicated thread with its own event loop.
         """
         if self._llm is None:
             return text
-        
+
         try:
             import asyncio
             from agent.auxiliary_client import async_call_llm
-            
+
             prompt = f"""Translate this news headline to Turkish. Return ONLY the Turkish translation, nothing else.
 
 Original: {text}
 Turkish:"""
-            
+
             async def do_translate():
                 messages = [
                     {"role": "system", "content": "You are a professional news translator. Translate English news headlines to Turkish. Return ONLY the translation."},
@@ -57,40 +58,19 @@ Turkish:"""
                 except (AttributeError, IndexError):
                     result = str(raw)
                 return result.strip().strip('"').strip("'")
-            
-            translated = asyncio.run(do_translate())
+
+            # Thread-safe: always use a fresh thread + event loop
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                future = pool.submit(lambda: asyncio.run(do_translate()))
+                translated = future.result(timeout=15)
+
             if translated and len(translated) > 5:
                 return translated
-        except RuntimeError:
-            # Running inside an existing event loop (Hermes agent context)
-            try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    # Create a new loop in a separate thread
-                    import threading
-                    result_holder = []
-                    def _run_in_thread():
-                        new_loop = asyncio.new_event_loop()
-                        asyncio.set_event_loop(new_loop)
-                        try:
-                            tr = new_loop.run_until_complete(do_translate())
-                            result_holder.append(tr)
-                        finally:
-                            new_loop.close()
-                    thread = threading.Thread(target=_run_in_thread, daemon=True)
-                    thread.start()
-                    thread.join(timeout=10)
-                    if result_holder and len(result_holder[0]) > 5:
-                        return result_holder[0]
-                else:
-                    translated = loop.run_until_complete(do_translate())
-                    if translated and len(translated) > 5:
-                        return translated
-            except Exception:
-                pass
-        except Exception as e:
+
+        except Exception:
             pass  # Fall back to original text
-        
+
         return text
 
     def _load_env(self):
@@ -150,15 +130,34 @@ Turkish:"""
         # Determine news category for Turkish context
         has_politics = any(kw in title.lower() for kw in ['trump', 'china', 'russia', 'ukraine', 'iran',
                           'president', 'election', 'senate', 'congress', 'minister',
-                          'erdogan', 'putin', 'xi ', 'biden', 'war', 'sanction'])
+                          'erdogan', 'putin', 'xi ', 'biden', 'war', 'sanction',
+                          'diplomacy', 'embassy', 'nato', 'united nations', 'eu ', 'government',
+                          'parliament', 'vote', 'democracy', 'refugee', 'military', 'defence',
+                          'tariff', 'trade war', 'ceasefire', 'treaty', 'summit', 'g7', 'g20'])
         has_health = any(kw in title.lower() for kw in ['ebola', 'virus', 'health', 'hospital', 'disease',
-                         'patient', 'covid', 'pandemic', 'vaccine', 'cancer'])
+                         'patient', 'covid', 'pandemic', 'vaccine', 'cancer',
+                         'who ', 'healthcare', 'medical', 'drug', 'treatment', 'obesity',
+                         'mental health', 'h5n1', 'bird flu', 'surgery', 'clinical'])
         has_tech = any(kw in title.lower() for kw in ['ai ', 'artificial', 'tech', 'apple', 'google',
-                       'microsoft', 'meta', 'tesla', 'nvidia', 'chip', 'software'])
+                       'microsoft', 'meta', 'tesla', 'nvidia', 'chip', 'software',
+                       'openai', 'claude', 'gemini', 'gpt', 'llm', 'chatgpt', 'anthropic',
+                       'quantum', 'blockchain', 'cyber', 'robotics', 'data ',
+                       'algorithm', 'computing', 'autonomous', 'startup', 'saas',
+                       'semiconductor', 'tsmc', 'intel', 'amd', 'qualcomm',
+                       'satellite', 'spacex', 'nasa', 'starlink', '5g', '6g'])
         has_economy = any(kw in title.lower() for kw in ['market', 'stock', 'economy', 'inflation',
-                          'interest', 'trade', 'tariff', 'bank', 'fed '])
+                          'interest', 'trade', 'tariff', 'bank', 'fed ',
+                          'ecb', 'central bank', 'gdp', 'recession', 'growth', 'finance',
+                          'investment', 'ipo', 'bond', 'yield', 'debt', 'deficit',
+                          'a.i.', 'earnings', 'profit', 'revenue', 'forex', 'crypto',
+                          'bitcoin', 'ethereum', 'stock market', 'wall street'])
         has_science = any(kw in title.lower() for kw in ['research', 'study', 'science', 'nature',
-                         'space', 'climate', 'nuclear', 'energy'])
+                         'space', 'climate', 'nuclear', 'energy',
+                         'discovery', 'physics', 'biology', 'genetics', 'dna',
+                         'paleontology', 'archaeology', 'astronomy', 'telescope',
+                         'jwst', 'hubble', 'mars', 'lunar', 'solar', 'particle',
+                         'carbon', 'emissions', 'renewable', 'solar', 'wind',
+                         'fusion', 'reactor', 'cern', 'nobel'])
         
         if has_politics:
             article += "Siyasi gelişmeler: "

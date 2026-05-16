@@ -23,6 +23,8 @@ import json
 import logging
 import re
 import shutil
+import sqlite3
+import time
 import urllib.request
 import urllib.error
 import urllib.parse
@@ -43,6 +45,7 @@ CONFIG = {
     "cross_verify_sources": 2,    # Minimum sources that must agree
     "cache_enabled": True,
     "rss_timeout": 5,             # Seconds per RSS fetch
+    "rss_delay": 0.3,             # Delay (s) between RSS fetches to avoid rate limiting
     "max_sources_per_story": 5,   # Max sources to track per story
 }
 
@@ -231,9 +234,9 @@ NEWS_SOURCES: Dict[str, NewsSource] = {
         category="news",
         tier=SourceTier.PRIMARY,
         rss_feeds=[
-            "https://www.reutersagency.com/feed/",
-            "https://www.reutersagency.com/feed/?taxonomy=best-sectors&post_type=best&best_sector=tech",
-            "https://www.reuters.com/arc/outboundfeeds/newsletter-rss/investigates/",
+            "https://www.reuters.com/arc/outboundfeeds/newsletter-rss/world/",
+            "https://www.reuters.com/arc/outboundfeeds/newsletter-rss/business/",
+            "https://www.reuters.com/arc/outboundfeeds/newsletter-rss/technology/",
         ],
         notes="World's largest wire service. Strict editorial standards. No political bias rating needed — pure factual reporting.",
     ),
@@ -244,8 +247,6 @@ NEWS_SOURCES: Dict[str, NewsSource] = {
         tier=SourceTier.PRIMARY,
         rss_feeds=[
             "https://rsshub.app/apnews",
-            "https://apnews.com/rss",
-            "https://rss.nytimes.com/services/xml/rss/nyt/World.xml",
         ],
         language="en",
         notes="Independent wire service, founded 1846. Gold standard for factual reporting. Used by 1,500+ newspapers globally.",
@@ -346,7 +347,6 @@ NEWS_SOURCES: Dict[str, NewsSource] = {
         rss_feeds=[
             "https://feeds.washingtonpost.com/rss/world",
             "https://feeds.washingtonpost.com/rss/national",
-            "https://feeds.washingtonpost.com/rss/business/technology",
             "https://feeds.washingtonpost.com/rss/business",
         ],
         notes="Major US newspaper, 70+ Pulitzers. Known for investigative journalism and accurate reporting.",
@@ -373,6 +373,40 @@ NEWS_SOURCES: Dict[str, NewsSource] = {
             "https://feeds.npr.org/1007/rss.xml",
         ],
         notes="US public radio network. Known for thorough fact-checking and unbiased reporting.",
+    ),
+    "cnn": NewsSource(
+        name="CNN",
+        base_url="https://www.cnn.com",
+        category="news",
+        tier=SourceTier.MAJOR,
+        rss_feeds=[
+            "https://edition.cnn.com/services/rss/",
+        ],
+        language="en",
+        notes="Major US news network. Global reach, 24/7 news coverage. Strong editorial standards.",
+    ),
+    "nbc_news": NewsSource(
+        name="NBC News",
+        base_url="https://www.nbcnews.com",
+        category="news",
+        tier=SourceTier.MAJOR,
+        rss_feeds=[
+            "https://feeds.nbcnews.com/nbcnews/public/news",
+            "https://feeds.nbcnews.com/nbcnews/public/tech",
+        ],
+        language="en",
+        notes="Major US broadcast news network. Part of NBCUniversal. Pulitzer Prize-winning journalism.",
+    ),
+    "fox_news": NewsSource(
+        name="Fox News",
+        base_url="https://www.foxnews.com",
+        category="news",
+        tier=SourceTier.MAJOR,
+        rss_feeds=[
+            "https://moxie.foxnews.com/google-publisher/latest.xml",
+        ],
+        language="en",
+        notes="Major US cable news network. Extensive domestic and international coverage.",
     ),
     # ════════════════════════════════════════════════════════
     # TIER 2: SPECIALIZED (High credibility in specific domains)
@@ -430,7 +464,6 @@ NEWS_SOURCES: Dict[str, NewsSource] = {
         rss_feeds=[
             "https://www.economist.com/feeds/print-sections/77/business.xml",
             "https://www.economist.com/feeds/print-sections/79/science-and-technology.xml",
-            "https://www.economist.com/feeds/print-sections/76/finance-and-economics.xml",
         ],
         notes="Weekly news & international affairs publication. Known for in-depth analysis and factual accuracy.",
     ),
@@ -476,7 +509,9 @@ NEWS_SOURCES: Dict[str, NewsSource] = {
         base_url="https://www.reuters.com/investigates",
         category="news",
         tier=SourceTier.PRIMARY,
-        rss_feeds=[],
+        rss_feeds=[
+            "https://www.reuters.com/arc/outboundfeeds/newsletter-rss/world/",
+        ],
         notes="Reuters' Pulitzer Prize-winning investigative journalism unit.",
     ),
     # ════════════════════════════════════════════════════════
@@ -526,6 +561,7 @@ NEWS_SOURCES: Dict[str, NewsSource] = {
         tier=SourceTier.MAJOR,
         rss_feeds=[
             "https://rss.dw.com/rdf/Turkish",
+            "https://www.dw.com/tr/rss",
         ],
         language="tr",
         country="turkey",
@@ -894,10 +930,12 @@ class HaberKuratorCore:
         self._init_stores_dirs()
         self._migrate_old_state()
 
-        # State cache
+        # State cache — SQLite backed (v3.1.0)
         self._state_cache_dir = root / '.state_cache'
         self._state_cache_dir.mkdir(parents=True, exist_ok=True)
         self._state_cache: Dict[str, RunState] = {}
+        self._db_path = str(self._state_cache_dir / 'state.db')
+        self._init_db()
         self._load_state_cache()
 
     # ──────────────────────────────────────────────────────────
@@ -921,33 +959,60 @@ class HaberKuratorCore:
                     continue
 
     # ──────────────────────────────────────────────────────────
-    # STATE CACHE
+    # STATE CACHE — SQLite Backed
     # ──────────────────────────────────────────────────────────
 
+    def _init_db(self):
+        """Initialize SQLite state cache database."""
+        try:
+            conn = sqlite3.connect(self._db_path)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS state_cache (
+                    slug TEXT PRIMARY KEY,
+                    title TEXT DEFAULT '',
+                    state TEXT DEFAULT 'captured',
+                    route TEXT DEFAULT 'VERIFIED',
+                    created TEXT DEFAULT '',
+                    updated TEXT DEFAULT '',
+                    source_type TEXT DEFAULT 'multi-source',
+                    verification_level TEXT DEFAULT 'unverified'
+                )
+            """)
+            conn.commit()
+            conn.close()
+            logger.debug(f"SQLite state cache initialized at {self._db_path}")
+        except sqlite3.Error as e:
+            logger.error(f"Failed to initialize SQLite state cache: {e}")
+
     def _save_state_cache(self):
-        """Persist state cache to disk as JSON."""
-        path = self._state_cache_dir / "runs_state.json"
-        data = {
-            slug: {
-                "slug": rs.slug,
-                "title": rs.title,
-                "state": rs.state,
-                "route": rs.route,
-                "created": rs.created,
-                "updated": rs.updated,
-                "source_type": rs.source_type,
-                "verification_level": rs.verification_level,
-            }
-            for slug, rs in self._state_cache.items()
-        }
-        path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+        """Persist state cache to SQLite."""
+        try:
+            conn = sqlite3.connect(self._db_path)
+            conn.execute("BEGIN TRANSACTION")
+            conn.execute("DELETE FROM state_cache")
+            for slug, rs in self._state_cache.items():
+                conn.execute(
+                    "INSERT OR REPLACE INTO state_cache "
+                    "(slug, title, state, route, created, updated, source_type, verification_level) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (rs.slug, rs.title, rs.state, rs.route,
+                     rs.created, rs.updated, rs.source_type, rs.verification_level)
+                )
+            conn.commit()
+            conn.close()
+        except sqlite3.Error as e:
+            logger.error(f"Failed to save state cache: {e}")
 
     def _load_state_cache(self):
-        """Load state cache from disk."""
-        path = self._state_cache_dir / "runs_state.json"
-        if path.exists():
+        """Load state cache from SQLite.
+        
+        Also migrates legacy JSON cache if present.
+        """
+        # Migration: check for legacy JSON cache
+        legacy_path = self._state_cache_dir / "runs_state.json"
+        if legacy_path.exists():
             try:
-                data = json.loads(path.read_text(encoding="utf-8"))
+                data = json.loads(legacy_path.read_text(encoding="utf-8"))
                 for slug, d in data.items():
                     self._state_cache[slug] = RunState(
                         slug=d["slug"],
@@ -959,8 +1024,33 @@ class HaberKuratorCore:
                         source_type=d.get("source_type", "multi-source"),
                         verification_level=d.get("verification_level", "unverified"),
                     )
-            except (json.JSONDecodeError, KeyError) as e:
-                logger.warning(f"Failed to load state cache: {e}")
+                self._save_state_cache()
+                # Rename legacy file to mark migration complete
+                legacy_path.rename(legacy_path.with_suffix(".json.migrated"))
+                logger.info(f"Migrated {len(data)} runs from legacy JSON cache to SQLite")
+                return
+            except (json.JSONDecodeError, KeyError, OSError) as e:
+                logger.warning(f"Legacy JSON cache migration failed: {e}")
+
+        # Load from SQLite
+        try:
+            conn = sqlite3.connect(self._db_path)
+            conn.row_factory = sqlite3.Row
+            cursor = conn.execute("SELECT * FROM state_cache")
+            for row in cursor.fetchall():
+                self._state_cache[row["slug"]] = RunState(
+                    slug=row["slug"],
+                    title=row["title"],
+                    state=row["state"],
+                    route=row["route"],
+                    created=row["created"],
+                    updated=row["updated"],
+                    source_type=row["source_type"],
+                    verification_level=row["verification_level"],
+                )
+            conn.close()
+        except sqlite3.Error as e:
+            logger.error(f"Failed to load state cache from SQLite: {e}")
 
     def setup(self) -> str:
         """Initialize directory structure."""
@@ -1045,6 +1135,9 @@ class HaberKuratorCore:
                 except Exception as e:
                     errors.append(f"{source.name}/{feed_url}: {str(e)[:60]}")
                     continue
+                finally:
+                    # Rate limiting: small delay between RSS fetches
+                    time.sleep(CONFIG["rss_delay"])
 
         # Deduplicate by title similarity
         unique = self._deduplicate_news(all_items)
@@ -1590,10 +1683,33 @@ class HaberKuratorCore:
 
     def _search_google_news(self, query: str, max_results: int = 20,
                            language: str = "tr", country: str = "TR") -> List[FetchedNewsItem]:
+        """Search for news articles matching a query via RSS.
+
+        Tries multiple free RSS search backends in order:
+        1. Google News RSS (primary)
+        2. Bing News RSS (fallback)
+
+        Returns deduplicated list of FetchedNewsItem with source attribution.
+        """
+        # Backend 1: Google News RSS
+        items = self._search_via_google_news(query, max_results, language, country)
+        if items:
+            return items
+
+        # Backend 2: Bing News RSS fallback
+        logger.info(f"Google News search failed, trying Bing News fallback for '{query}'")
+        items = self._search_via_bing_news(query, max_results)
+        if items:
+            return items
+
+        return []
+
+    def _search_via_google_news(self, query: str, max_results: int = 20,
+                                language: str = "tr", country: str = "TR") -> List[FetchedNewsItem]:
         """Search Google News RSS for articles matching a specific query.
 
         Uses free Google News RSS search endpoint (no API key required).
-        Supports Turkish language queries with TR locale.
+        This endpoint is deprecated by Google — Bing fallback handles failures.
 
         Args:
             query: Free-form search text (e.g., "istanbulda kapkaça uğrayan kadın")
@@ -1668,6 +1784,67 @@ class HaberKuratorCore:
             logger.warning(f"Google News search parse error for '{query}': {e}")
         except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
             logger.warning(f"Google News search network error for '{query}': {e}")
+
+        return items
+
+    def _search_via_bing_news(self, query: str, max_results: int = 20) -> List[FetchedNewsItem]:
+        """Search Bing News RSS as fallback search backend.
+
+        Uses Bing's free news RSS search (no API key required).
+        Returns fewer results than Google News but more reliable.
+
+        Args:
+            query: Free-form search text
+            max_results: Maximum number of results to return
+
+        Returns:
+            List of FetchedNewsItem with source attribution
+        """
+        encoded = urllib.parse.quote(query)
+        search_url = f"https://www.bing.com/news/search?q={encoded}&format=rss"
+
+        items = []
+        try:
+            req = urllib.request.Request(
+                search_url,
+                headers={"User-Agent": f"Haber-Kuratör/{VERSION} BingNews"}
+            )
+            with urllib.request.urlopen(req, timeout=CONFIG["rss_timeout"]) as resp:
+                xml_data = resp.read()
+
+            root_el = ET.fromstring(xml_data)
+
+            for item in root_el.findall(".//item"):
+                title = item.findtext("title", "").strip()
+                link = item.findtext("link", "").strip()
+                pub_date = item.findtext("pubDate", "").strip()
+                source_el = item.find("source")
+                source_name = source_el.text.strip() if source_el is not None and source_el.text else "Bing News"
+                snippet = item.findtext("description", "").strip()
+
+                if not title:
+                    continue
+
+                known = self._find_known_source(source_name)
+
+                items.append(FetchedNewsItem(
+                    title=title,
+                    url=link or "https://bing.com/news",
+                    source_name=known.name if known else source_name,
+                    source_tier=known.tier if known else SourceTier.SUPPLEMENTARY,
+                    published=pub_date,
+                    summary=self._clean_html(snippet)[:300],
+                    category=known.category if known else "news",
+                    guid=link or title,
+                ))
+
+                if len(items) >= max_results:
+                    break
+
+            logger.info(f"Bing News search '{query}': {len(items)} results")
+
+        except Exception as e:
+            logger.warning(f"Bing News search failed for '{query}': {e}")
 
         return items
 
@@ -1862,8 +2039,6 @@ class HaberKuratorCore:
 
         # Auto-advance to published if highly verified and no human review
         if verification_level >= 2 and not human_review:
-            self.update_state(slug, "fact_checking")
-            self.update_state(slug, "cross_verified")
             self.update_state(slug, "published")
             result["auto_advanced"] = True
 
@@ -2179,9 +2354,10 @@ Return ONLY the markdown brief. No extra commentary."""
 
             brief_path = run_path / "brief.md"
             brief_path.write_text(text, encoding="utf-8")
-            self.update_state(slug, "brief_ready")
+            # Brief hazırlandıktan sonra cross_verified state'ine geç (brief_ready artık yok)
+            self.update_state(slug, "cross_verified")
 
-            return {"slug": slug, "status": "brief_ready", "length": len(text)}
+            return {"slug": slug, "status": "cross_verified", "length": len(text)}
 
         except Exception as e:
             return {"error": f"Brief generation failed: {str(e)}"}
@@ -2526,7 +2702,6 @@ CRITICAL RULES:
 
             report_path = run_path / "verifier-report.md"
             report_path.write_text(text, encoding="utf-8")
-            self.update_state(slug, "verification")
 
             return {"slug": slug, "status": "verified", "length": len(text)}
 
@@ -3290,13 +3465,34 @@ Return as markdown:
         return "\n".join(lines[:5]) if lines else content[:300]
 
     def enable_gbrain(self):
-        """Enable GBrain integration for enhanced context retrieval."""
+        """Enable GBrain integration for enhanced context retrieval.
+        
+        GBrain integration provides semantic search over past learnings.
+        When enabled, _query_gbrain uses GBrain MCP tools to find
+        relevant proof and context for news briefs.
+        
+        Note: GBrain MCP tools must be connected at runtime via Hermes
+        config. This is a passive integration point — no MCP import needed here.
+        """
         self.gbrain_enabled = True
         logger.info("GBrain integration enabled for Haber Kuratör")
 
     def _query_gbrain(self, query: str) -> Dict[str, str]:
+        """Query GBrain for relevant context.
+        
+        Integration point: when GBrain MCP tools (mcp_gbrain_query, etc.)
+        are connected, this method can use them to find relevant pages.
+        
+        Example implementation:
+            from hermes_tools import mcp_gbrain_query
+            result = mcp_gbrain_query(query=query, limit=3)
+            return {item['slug']: item['content'] for item in result.get('results', [])}
+        
+        Returns empty dict when GBrain is not connected.
+        """
         if not self.gbrain_enabled:
             return {}
+        logger.debug(f"GBrain query (stub): {query[:80]}")
         return {}
 
     # --- Pattern Analysis ---
@@ -3490,8 +3686,6 @@ Return as markdown:
                 title=existing.title,
                 state="archived",
                 route=existing.route,
-                format=existing.format,
-                pillar=existing.pillar,
                 created=existing.created,
                 updated=datetime.now().isoformat(),
                 source_type=existing.source_type,

@@ -14,3 +14,5 @@ provides_commands:
   - /haber
 provides_cli:
   - hermes haber
+python_dependencies:
+  - rich>=13.0.0
