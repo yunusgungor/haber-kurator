@@ -142,7 +142,7 @@ hermes_plugins.haber_kurator (namespace package)
 │
 ├── cli.py                      ← CLI handler (~1070 satır)
 │   • register_cli()            ← Argparse ağacı kurulumu
-│   • handler(args)             ← 28 alt komut dağıtıcısı
+│   • handler(args)             ← 28 alt komut dağıtıcısı + NLP
 │
 ├── writer_agent.py             ← Otomatik haber yazma ajanı
 │   • WriterAgent sınıfı        ← generate_news(), auto_publish(), post_to_memos()
@@ -948,10 +948,10 @@ FAIL: high severity bulgu ≥ 1
 
 | Kademe | Pattern Sayısı | REVISE Eşiği | REJECT Eşiği |
 |--------|---------------|-------------|-------------|
-| 🔴 Tier 1 (Critical) | 32 | ≥1 pattern | ≥3 pattern |
-| 🟡 Tier 2 (High) | 32 | ≥3 pattern | ≥5 pattern |
-| 🟢 Tier 3 (Medium) | 33 | ≥8 pattern | ≥15 pattern |
-| ⚪ Bonus (Tone) | 9 | Kontekst bazlı | — |
+| 🔴 Tier 1 (Critical) | 45 | ≥1 pattern | ≥3 pattern |
+| 🟡 Tier 2 (High) | 33 | ≥3 pattern | ≥5 pattern |
+| 🟢 Tier 3 (Medium) | 19 | ≥8 pattern | ≥15 pattern |
+| ⚪ Bonus (Tone) | 14 | Kontekst bazlı | — |
 
 ### 9.2 Tier 1 — Sıfır Tolerans (Haber)
 
@@ -1311,19 +1311,25 @@ Tüm CLI komutlarının `/haber` karşılığı vardır:
 
 ### 15.7 Doğal Dil Desteği (NLP)
 
-Hermes içinde `/haber` komutuna **Türkçe doğal dil cümleleri** yazabilirsiniz.
-Sistem kelimelerden niyeti ve kategoriyi otomatik algılar:
+Doğal dil komutları **hem CLI'da hem Hermes içinde** çalışır. Sistem kelimelerden niyeti ve kategoriyi otomatik algılar:
+
+| Nerede | Örnek |
+|--------|-------|
+| **CLI** | `hermes haber teknoloji haberlerini getir` |
+| **Slash** | `/haber teknoloji haberlerini getir` |
+
+Tüm desteklenen kalıplar:
 
 | Dediğiniz | Ne Yapar |
 |-----------|----------|
-| `/haber teknoloji haberlerini getir` | `fetch --category technology` |
-| `/haber ekonomi haberlerini doğrula` | `verify --category business` |
-| `/haber son dakika haberlerini yayınla` | `publish --category news` |
-| `/haber bilim haberlerini otomatik yayınla` | `auto-publish --category science` |
-| `/haber kaynakları listele` | `sources` |
-| `/haber haber doğrula` | `verify` (tüm kategoriler) |
-| `/haber haber yayınla` | `publish` (tüm kategoriler) |
-| `/haber getir` | `fetch` (tüm kategoriler) |
+| `teknoloji haberlerini getir` | `fetch --category technology` |
+| `ekonomi haberlerini doğrula` | `verify --category business` |
+| `son dakika haberlerini yayınla` | `publish --category news` |
+| `bilim haberlerini otomatik yayınla` | `auto-publish --category science` |
+| `kaynakları listele` | `sources` |
+| `haber doğrula` | `verify` (tüm kategoriler) |
+| `haber yayınla` | `publish` (tüm kategoriler) |
+| `getir` | `fetch` (tüm kategoriler) |
 
 **Desteklenen kategoriler:** teknoloji, ekonomi/finans, bilim/araştırma, gündem, son dakika
 **Desteklenen fiiller:** getir/çek/ara (fetch), doğrula/kontrol et/teyit et (verify), yayınla/paylaş/gönder (publish), otomatik yayınla (auto-publish)
