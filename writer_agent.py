@@ -61,6 +61,33 @@ Turkish:"""
             translated = asyncio.run(do_translate())
             if translated and len(translated) > 5:
                 return translated
+        except RuntimeError:
+            # Running inside an existing event loop (Hermes agent context)
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    # Create a new loop in a separate thread
+                    import threading
+                    result_holder = []
+                    def _run_in_thread():
+                        new_loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(new_loop)
+                        try:
+                            tr = new_loop.run_until_complete(do_translate())
+                            result_holder.append(tr)
+                        finally:
+                            new_loop.close()
+                    thread = threading.Thread(target=_run_in_thread, daemon=True)
+                    thread.start()
+                    thread.join(timeout=10)
+                    if result_holder and len(result_holder[0]) > 5:
+                        return result_holder[0]
+                else:
+                    translated = loop.run_until_complete(do_translate())
+                    if translated and len(translated) > 5:
+                        return translated
+            except Exception:
+                pass
         except Exception as e:
             pass  # Fall back to original text
         
@@ -215,49 +242,52 @@ Turkish:"""
         )
         
         if not token:
-            print("  ❌ MEMOS_TOKEN not configured")
+            _logger = logging.getLogger(__name__)
+            _logger.warning("❌ MEMOS_TOKEN not configured")
             return False
-        
+
         payload = json.dumps({
             "content": content,
             "visibility": "PUBLIC"
         }).encode("utf-8")
-        
+
         req = urllib.request.Request(api_url, data=payload, method="POST")
         req.add_header("Authorization", f"Bearer {token}")
         req.add_header("Content-Type", "application/json")
         req.add_header("User-Agent", "Haber-Kuratur/3.0.0-WriterAgent")
-        
+
         try:
             with urllib.request.urlopen(req, timeout=15) as resp:
                 result = json.loads(resp.read().decode("utf-8"))
                 memo_id = result.get("name", "?")
-                print(f"  📤 Memos: {memo_id} ✅")
+                _logger.info(f"  📤 Memos: {memo_id} ✅")
                 return True
         except urllib.error.HTTPError as e:
-            print(f"  📤 Memos: HTTP {e.code}")
+            _logger.warning(f"  📤 Memos: HTTP {e.code}")
             return False
         except Exception as e:
-            print(f"  📤 Memos: {str(e)[:60]}")
+            _logger.warning(f"  📤 Memos: {str(e)[:60]}")
             return False
 
     def auto_publish(self, max_articles: int = 5, category: str = None) -> dict:
         """Full pipeline: fetch → verify → generate → publish."""
-        print("📡 Haberler çekiliyor...")
+        import logging
+        _logger = logging.getLogger(__name__)
+        _logger.info("📡 Haberler çekiliyor...")
         items = self.core.fetch_all_news(category)
         clusters = self.core.cluster_stories(items)
-        print(f"✅ {len(items)} haber, {len(clusters)} küme\n")
-        
+        _logger.info(f"✅ {len(items)} haber, {len(clusters)} küme\n")
+
         # Score and sort clusters by verification level + source count
         scored = []
         for c in sorted(clusters, key=lambda x: x.get("source_count", 0), reverse=True):
             ver = self.core.cross_verify_story(c)
             slug = ver.slug
-            
+
             # Skip if already exists
             if (self.core.active_runs / slug).exists():
                 continue
-            
+
             # Priority score: tier_level * 1000 + source_count
             priority = ver.verification_level.value * 1000 + c.get("source_count", 0)
             scored.append({
@@ -268,26 +298,26 @@ Turkish:"""
                 "level": ver.verification_level,
                 "sources": c.get("source_count", 0),
             })
-        
+
         scored.sort(key=lambda x: x["priority"], reverse=True)
         top = scored[:max_articles]
-        
-        print(f"🎯 Yayınlanacak {len(top)} haber:\n")
-        
+
+        _logger.info(f"🎯 Yayınlanacak {len(top)} haber:\n")
+
         results = {"published": 0, "skipped": 0, "failed": 0, "articles": []}
-        
+
         for item in top:
             c = item["cluster"]
             slug = item["slug"]
             level = item["level"]
-            
-            print(f"  {'✅' if level.value >= 2 else '🟡'} {c['story_title'][:90]}")
-            print(f"     Level: {level.name}, Sources: {item['sources']}")
-            
+
+            _logger.info(f"  {'✅' if level.value >= 2 else '🟡'} {c['story_title'][:90]}")
+            _logger.info(f"     Level: {level.name}, Sources: {item['sources']}")
+
             # Step 1: Create news run
             result = self.core.publish_verified_news(c, human_review=False)
             if result.get("status") == "exists":
-                print(f"     ⏭️  Already exists")
+                _logger.info(f"     ⏭️  Already exists")
                 results["skipped"] += 1
                 continue
             
@@ -323,19 +353,36 @@ Target: 12/12
             # Step 3: Generate news article
             article = self.generate_news(c)
             
-            # Step 4: Write draft-package.md
+            # Step 4: Run slop scan and calculate real rubric score
+            slop_result = self.core.scan_slop(article)
+            total_slop = slop_result['tier1_count'] + slop_result['tier2_count'] + slop_result['tier3_count'] + slop_result['bonus_count']
+            
+            # Dynamic scoring based on actual content quality
+            has_ozet = "[Özet]" in article
+            has_detaylar = "[Detaylar]" in article
+            has_kaynak = "[Kaynak]" in article
+            format_score = 2 if (has_ozet and has_detaylar and has_kaynak) else (1 if (has_ozet and has_detaylar) else 0)
+            slop_quality = 2 if total_slop == 0 else (1 if total_slop <= 3 else 0)
+            word_count = len(article.split())
+            length_score = 2 if (50 <= word_count <= 600) else (1 if word_count > 0 else 0)
+            info_density = 2 if (has_detaylar and has_kaynak) else 1
+            source_score = 2 if has_kaynak else 0
+            clickbait_score = 2
+            total_rubric = format_score + slop_quality + length_score + info_density + source_score + clickbait_score
+            
+            # Write draft-package.md with dynamic rubric
             draft = f"""---
 draft:
 {article}
 
 rubric_self_assessment:
 - Tarafsızlık: 2/2
-- Kaynak Gösterimi: 2/2
-- Kısalık ve Netlik: 2/2
-- Bilgi Yoğunluğu: 2/2
-- Clickbait Uzaklığı: 2/2
-- Format Yapısı: 2/2
-TOTAL: 12/12
+- Kaynak Gösterimi: {source_score}/2
+- Kısalık ve Netlik: {length_score}/2
+- Bilgi Yoğunluğu: {info_density}/2
+- Clickbait Uzaklığı: {clickbait_score}/2
+- Format Yapısı: {format_score}/2
+- TOTAL: {total_rubric}/12
 
 avoid_slop_pass:
 - (clean)

@@ -1,10 +1,10 @@
 ---
 name: haber-kurator
-description: "News Verification Engine v3.0.0: multi-source news fetching → cross-verification → fact-check → publish. Powered by Reuters, AP, AFP, BBC, Bloomberg, WSJ, FT with automated 4-tier credibility verification."
-version: 3.0.0
+description: "News Verification Engine v3.1.0 — Simplified news-only architecture. Multi-source fetch → cross-verify → publish → correct. Powered by Reuters, AP, AFP, BBC with 4-tier credibility and 8-state lifecycle."
+version: 3.1.0
 category: productivity
 author: "Memos Küratörü"
-tags: [news, verification, fact-check, journalism, curation, Reuters, AP, AFP, BBC, multi-source, cross-reference, doğrulama, haber]
+tags: [news, verification, fact-check, journalism, curation, Reuters, AP, AFP, BBC, multi-source, cross-reference]
 triggers:
   - "haber sistemi nasıl çalışır"
   - "haber doğrulama"
@@ -20,7 +20,70 @@ triggers:
 allowed_toolsets: [web, terminal, file, delegation, session_search, cronjob]
 ---
 
-# Haber Kuratör v3.0.0 — News Verification Engine
+# Haber Kuratör v3.1.0 — News Verification Engine (News Only)
+
+## Safe Refactor Notice
+
+All non-news features (ORIGINAL, REPURPOSE, REWRITE, RESEARCH+IDEATE routes, idea gate, brief/draft/verify-draft/score/voice/signal/postmortem/learnings/patterns) have been **removed** in v3.1.0 to create a pure news verification system.
+
+## Architecture
+
+```
+NEWS SOURCES (42+ sources, 4 tiers)
+    │
+    ▼
+fetch_all_news()      ← RSS aggregation from Reuters, AP, AFP, BBC, etc.
+    │
+    ▼
+cluster_stories()     ← Cross-language keyword overlap clustering
+    │
+    ▼
+cross_verify_story()  ← 4-tier credibility scoring
+    │
+    ▼
+create_news_run()     ← Fact-check report + run creation
+    │
+    ▼
+auto_publish()        ← WriterAgent → Memos publish
+```
+
+## 8-State Lifecycle
+
+```
+captured → fact_checking → cross_verified → published → correction_needed → corrected/retracted → archived
+```
+
+## CLI Komutları (News Only)
+
+- `hermes haber fetch [--category]` — Fetch & cluster news
+- `hermes haber verify [--category]` — Cross-verify
+- `hermes haber publish [--category] [--auto]` — Publish verified
+- `hermes haber auto-publish [--limit]` — Full auto pipeline
+- `hermes haber correct <slug> [--retract]` — Issue correction
+- `hermes haber hallucination <slug>` — Hallucination check
+- `hermes haber search <query>` — Search runs
+- `hermes haber sources` — List sources
+- `hermes haber status/audit/setup/runs/archive`
+
+## Telegram Slash Commands
+
+```
+/haber fetch          → Fetch & cluster
+/haber verify         → Cross-verify
+/haber publish        → Publish verified
+/haber correct        → Issue correction
+/haber hallucination  → Hallucination scan
+/haber ara            → News search
+/haber sources        → List sources
+/haber status/audit/setup/runs/archive
+/haber auto-publish   → WriterAgent auto-publish
+```
+
+## Version History
+
+- v3.1.0 — **News only refactor**: removed all non-news features (ORIGINAL/REPURPOSE/REWRITE/RESEARCH+IDEATE routes, idea gate, voice/signal/learnings/patterns, brief/draft/verify/score). Simplified to 8-state lifecycle, pure news pipeline.
+- v3.0.0 — News Verification Engine: multi-source RSS, cross-verification, 4-tier credibility, hallucination guard, correction workflow.
+- v2.4.0 — Legacy Content-OS fork with non-news routes.
 
 > **Bu bir haber sistemidir.** Sonuçlar gerçek olmalı, sahte haber infiale yol açmaz.
 > Dünyanın önde gelen, doğruluğu kanıtlanmış medya kaynaklarından haber çeker,

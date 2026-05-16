@@ -25,6 +25,7 @@ import re
 import shutil
 import urllib.request
 import urllib.error
+import urllib.parse
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Set
@@ -658,82 +659,31 @@ RSS_PROBES = ["/feed", "/rss", "/rss.xml", "/feed.xml", "/atom.xml", "/news/rss"
 
 
 # ══════════════════════════════════════════════════════════════
-# STATE MACHINE — 18 States (14 original + 4 news-specific)
+# STATE MACHINE — 8 States (News Only)
 # ══════════════════════════════════════════════════════════════
 
 STATE_LIFECYCLE = [
-    # Captured → Verification Pipeline
-    "captured",          # News item first enters the system
-    "fact_checking",     # 🔄 NEW: Cross-verification in progress
-    "cross_verified",    # 🔄 NEW: Claims verified against sources
-    "idea_review",       # Route decision (VERIFIED or follow-up)
-    # Production Pipeline
-    "brief_ready",
-    "drafting",
-    "verification",
-    "draft_review",
-    "approved",
-    "scheduler_ready",
-    "scheduled",
-    "published",
-    # Feedback Pipeline
-    "feedback_24h",
-    "feedback_72h",
-    "learned",
-    # Correction Pipeline (NEW)
-    "correction_needed",  # 🔄 NEW: Error detected post-publication
-    "corrected",          # 🔄 NEW: Correction issued
-    "retracted",          # 🔄 NEW: Story retracted
+    "captured",           # News item enters the system
+    "fact_checking",      # Cross-verification in progress
+    "cross_verified",     # Claims verified against sources
+    "published",          # Published to Memos
+    "correction_needed",  # Error detected post-publication
+    "corrected",          # Correction issued
+    "retracted",          # Story retracted
     "archived",
 ]
 
 STATE_TRANSITIONS = {
     "captured":           ["fact_checking"],
-    "fact_checking":      ["cross_verified", "captured"],  # re-verify if needed
-    "cross_verified":     ["idea_review", "captured"],     # back if verification fails
-    "idea_review":        ["brief_ready", "captured"],
-    "brief_ready":        ["drafting"],
-    "drafting":           ["verification"],
-    "verification":       ["draft_review"],
-    "draft_review":       ["approved", "brief_ready", "captured"],
-    "approved":           ["scheduler_ready"],
-    "scheduler_ready":    ["scheduled"],
-    "scheduled":          ["published"],
-    "published":          ["feedback_24h", "correction_needed"],
-    "feedback_24h":       ["feedback_72h", "correction_needed"],
-    "feedback_72h":       ["learned", "correction_needed"],
-    "learned":            ["archived", "correction_needed"],
+    "fact_checking":      ["cross_verified", "captured"],
+    "cross_verified":     ["captured", "published"],
+    "published":          ["correction_needed", "archived"],
     "correction_needed":  ["corrected", "retracted"],
-    "corrected":          ["learned"],
+    "corrected":          ["published"],
     "retracted":          ["archived"],
     "archived":           [],
 }
 
-IDEA_ROUTES = [
-    "VERIFIED",          # 🔄 NEW: Multi-source verified news
-    "ORIGINAL",
-    "REPURPOSE",
-    "REWRITE",
-    "RESEARCH+IDEATE",
-]
-
-# State → filename mapping for auto-detection (sync_state)
-STATE_FILE_MAP = {
-    "fact_checking":     "fact-check-report.md",
-    "cross_verified":    "fact-check-report.md",
-    "correction_needed": "correction.md",
-    "corrected":         "correction.md",
-    "retracted":         "correction.md",
-    "published":         "published",
-    "verification":      "verifier-report.md",
-    "feedback_72h":      "feedback.md",
-    "feedback_24h":      "feedback.md",
-    "learned":           "feedback.md",
-    "drafting":          "draft-package.md",
-    "brief_ready":       "brief.md",
-}
-
-# Content route constants
 ROUTE_VERIFIED = "VERIFIED"
 
 # Self-assessment fields for Writer Agent output
@@ -876,8 +826,6 @@ class RunState:
     title: str = ""
     state: str = "captured"
     route: str = "VERIFIED"
-    format: str = "Haber Bülteni"
-    pillar: str = "Genel Haber"
     created: str = ""
     updated: str = ""
     source_type: str = "multi-source"
@@ -987,8 +935,6 @@ class HaberKuratorCore:
                 "title": rs.title,
                 "state": rs.state,
                 "route": rs.route,
-                "format": rs.format,
-                "pillar": rs.pillar,
                 "created": rs.created,
                 "updated": rs.updated,
                 "source_type": rs.source_type,
@@ -1010,8 +956,6 @@ class HaberKuratorCore:
                         title=d.get("title", ""),
                         state=d.get("state", "captured"),
                         route=d.get("route", "VERIFIED"),
-                        format=d.get("format", "Haber Bülteni"),
-                        pillar=d.get("pillar", "Genel Haber"),
                         created=d.get("created", ""),
                         updated=d.get("updated", ""),
                         source_type=d.get("source_type", "multi-source"),
@@ -1609,6 +1553,202 @@ class HaberKuratorCore:
         return f"{date_prefix}-{slug}"
 
     # ══════════════════════════════════════════════════════════
+    # 4b. NEWS SEARCH — Query-specific multi-source search
+    # ══════════════════════════════════════════════════════════
+
+    def _find_known_source(self, source_name: str) -> Optional[NewsSource]:
+        """Try to match a source name from search results to our known sources directory.
+
+        Uses fuzzy matching on source name and domain to find the best match.
+        """
+        name_lower = source_name.lower().strip()
+
+        # 1. Direct name match
+        for key, src in self.sources.items():
+            if name_lower == src.name.lower():
+                return src
+
+        # 2. Name containment (source name contains our key or vice versa)
+        for key, src in self.sources.items():
+            src_lower = src.name.lower()
+            # Remove common prefixes/suffixes
+            for prefix in ["the ", "the "]:
+                if name_lower.startswith(prefix):
+                    trimmed = name_lower[len(prefix):]
+                    if trimmed == src_lower:
+                        return src
+            if src_lower in name_lower or name_lower in src_lower:
+                return src
+
+        # 3. Domain-based matching
+        for key, src in self.sources.items():
+            domain = urllib.parse.urlparse(src.base_url).netloc.lower()
+            domain_parts = domain.split(".")
+            for part in domain_parts:
+                if len(part) > 3 and part in name_lower:
+                    return src
+
+        return None
+
+    def _search_google_news(self, query: str, max_results: int = 20,
+                           language: str = "tr", country: str = "TR") -> List[FetchedNewsItem]:
+        """Search Google News RSS for articles matching a specific query.
+
+        Uses free Google News RSS search endpoint (no API key required).
+        Supports Turkish language queries with TR locale.
+
+        Args:
+            query: Free-form search text (e.g., "istanbulda kapkaça uğrayan kadın")
+            max_results: Maximum number of results to return
+            language: Language code (tr, en, etc.)
+            country: Country code (TR, US, etc.)
+
+        Returns:
+            List of FetchedNewsItem with source attribution and tier mapping
+        """
+        encoded = urllib.parse.quote(query)
+        search_url = (
+            f"https://news.google.com/rss/search?q={encoded}"
+            f"&hl={language}&gl={country}&ceid={country}:{language}"
+        )
+
+        items = []
+        try:
+            req = urllib.request.Request(
+                search_url,
+                headers={"User-Agent": f"Haber-Kuratör/{VERSION} NewsSearch/{language}"}
+            )
+            with urllib.request.urlopen(req, timeout=CONFIG["rss_timeout"]) as resp:
+                xml_data = resp.read()
+
+            root_el = ET.fromstring(xml_data)
+            ATOM_NS = "{http://www.w3.org/2005/Atom}"
+
+            # Google News returns RSS 2.0 format
+            for item in root_el.findall(".//item"):
+                title = item.findtext("title", "").strip()
+                link = item.findtext("link", "").strip()
+                pub_date = item.findtext("pubDate", "").strip()
+                snippet = item.findtext("description", "").strip()
+
+                # Source name from <source> element or parse from title
+                source_el = item.find("source")
+                source_name = "Google News"
+                if source_el is not None and source_el.text:
+                    source_name = source_el.text.strip()
+                else:
+                    # Try to extract source from title (often "Title - Source Name")
+                    title_parts = title.rsplit(" - ", 1)
+                    if len(title_parts) > 1:
+                        title = title_parts[0]
+                        source_name = title_parts[1]
+
+                if not title:
+                    continue
+
+                # Map to known source for credibility
+                known = self._find_known_source(source_name)
+
+                items.append(FetchedNewsItem(
+                    title=title,
+                    url=link or "https://news.google.com",
+                    source_name=known.name if known else source_name,
+                    source_tier=known.tier if known else SourceTier.SUPPLEMENTARY,
+                    published=pub_date,
+                    summary=self._clean_html(snippet)[:300],
+                    category=known.category if known else "news",
+                    guid=link or title,
+                ))
+
+                if len(items) >= max_results:
+                    break
+
+            logger.info(f"Google News search '{query}': {len(items)} results, "
+                        f"language={language}, country={country}")
+
+        except ET.ParseError as e:
+            logger.warning(f"Google News search parse error for '{query}': {e}")
+        except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
+            logger.warning(f"Google News search network error for '{query}': {e}")
+
+        return items
+
+    def search_news(self, query: str, max_results: int = 20,
+                    language: str = "tr", country: str = "TR") -> Dict[str, Any]:
+        """Search for a specific news topic across multiple sources.
+
+        Complete pipeline: search → fetch → deduplicate → cluster → cross-verify.
+        Returns structured results with source attribution and verification levels.
+
+        Args:
+            query: Free-form search query in any language
+            max_results: Max search results to process (default: 20)
+            language: Language for search results (default: 'tr' for Turkish)
+            country: Country for search results (default: 'TR')
+
+        Returns:
+            Dict with:
+            - query: the original search term
+            - total_results: raw result count
+            - clusters: story cluster count
+            - verified_count: how many clusters pass verification
+            - results: list of {cluster, verification} dicts
+        """
+        logger.info(f"search_news called: query=%.80r, max_results=%d, lang=%s",
+                    query, max_results, language)
+
+        # Step 1: Search Google News
+        raw_items = self._search_google_news(query, max_results, language, country)
+
+        if not raw_items:
+            return {
+                "query": query,
+                "total_results": 0,
+                "clusters": 0,
+                "verified_count": 0,
+                "results": [],
+                "note": "No results found. Try a different query or language.",
+            }
+
+        # Step 2: Deduplicate by URL and title
+        unique_items = self._deduplicate_news(raw_items)
+
+        # Step 3: Story-level clustering
+        clusters = self.cluster_stories(unique_items)
+
+        # Step 4: Cross-verify each cluster
+        results = []
+        for cluster in clusters:
+            verification = self.cross_verify_story(cluster)
+            results.append({
+                "cluster": {
+                    "story_title": cluster["story_title"],
+                    "source_count": cluster["source_count"],
+                    "tier_count": cluster["tier_count"],
+                    "best_url": cluster.get("best_url", ""),
+                    "categories": cluster.get("categories", []),
+                },
+                "verification": verification.to_dict(),
+            })
+
+        verified_count = sum(1 for r in results if r["verification"]["is_safe_to_publish"])
+
+        # Sort by source count (best covered first)
+        results.sort(key=lambda r: r["cluster"]["source_count"], reverse=True)
+
+        logger.info(f"search_news '{query}': {len(raw_items)} raw → {len(clusters)} clusters "
+                    f"→ {verified_count} verified")
+
+        return {
+            "query": query,
+            "total_results": len(raw_items),
+            "unique_results": len(unique_items),
+            "clusters": len(clusters),
+            "verified_count": verified_count,
+            "results": results,
+        }
+
+    # ══════════════════════════════════════════════════════════
     # 5. FACT-CHECK PIPELINE
     # ══════════════════════════════════════════════════════════
 
@@ -1684,9 +1824,6 @@ class HaberKuratorCore:
 
 ## Verification
 {verification.summary}
-
-## Voice Profile Summary
-{self._get_voice_summary()}
 """
         (run_path / "context.md").write_text(context_md, encoding="utf-8")
 
@@ -1696,8 +1833,6 @@ class HaberKuratorCore:
             title=cluster['story_title'],
             state=initial_state,
             route=route,
-            format="Haber Bülteni",
-            pillar=", ".join(cluster.get('categories', ['Genel Haber'])),
             created=datetime.now().isoformat(),
             updated=datetime.now().isoformat(),
             source_type="multi-source",
@@ -1739,220 +1874,11 @@ class HaberKuratorCore:
     # ══════════════════════════════════════════════════════════
 
     def decide_route(self, idea: str, source_hint: str = "") -> Dict[str, Any]:
-        """Determine the route for a news idea.
-        
-        Updated for v3.0: VERIFIED route for multi-source news,
-        existing routes for other content types.
-        """
-        logger.info("decide_route called with idea=%.80r, source_hint=%r", idea, source_hint)
-        idea_lower = idea.lower()
-        source = source_hint.lower().strip() if source_hint else ""
-
-        # Explicit source hint takes priority
-        if source in ("internal", "external", "existing", "research", "verified"):
-            route_map = {
-                "verified": ("VERIFIED", "Multi-source verified news — direct from wire services/major outlets.", "multi-source"),
-                "research": ("RESEARCH+IDEATE", "Keşif odaklı fikir — çıktı post değil, fikir listesi.", "keşif"),
-                "external": ("REWRITE", "Dış kaynaktan ilham alınmış — kendi sesinle yeniden yazılacak.", "harici"),
-                "existing": ("REPURPOSE", "Mevcut içerikten türetme — format/platform değişimi.", "mevcut içerik"),
-                "internal": ("ORIGINAL", "Kişisel deneyim/düşünce — en yüksek değerli içerik tipi.", "kişisel"),
-            }
-            route, rationale, s_type = route_map.get(source, ("ORIGINAL", "Varsayılan rota.", "belirsiz"))
-            return {"route": route, "rationale": rationale, "source_type": s_type}
-
-        # Keyword-based detection
-        def has_word(word):
-            return bool(re.search(r'\b' + re.escape(word) + r'\b', idea_lower))
-
-        def has_any(words):
-            return any(has_word(w) or w in idea_lower for w in words)
-
-        # News-specific keywords (trigger VERIFIED route)
-        news_kw = ["reuters", "associated press", "ap ", "bbc", "bloomberg", "the guardian",
-                   "according to", "reported by", "confirmed by", "sources say",
-                   "breaking news", "developing", "announced", "released", "published",
-                   "haber", "news", "gündem", "son dakika"]
-
-        internal_kw = ["ben", "benim", "kendi", "yaşadı", "deneyim", "tecrübe",
-                       "personal experience", "my ", "our ", " we "]
-        existing_kw = ["önceki", "devam", "güncelle", "update", "part", "bölüm",
-                       "follow-up", "sequel", "series"]
-        external_kw = ["makale", "article", "podcast", "video", "madde", "post",
-                       "gördüm", "okudum", "izledim", "found", "read", "saw"]
-        research_kw = ["araştır", "araştir", "keşfet", "kesfet", "research", "explore",
-                       "investigate", "analiz et", "karşılaştır", "karsilastir", "trend"]
-
-        is_news = has_any(news_kw)
-        is_internal = has_any(internal_kw)
-        is_existing = has_any(existing_kw)
-        is_external = has_any(external_kw)
-        is_research = has_any(research_kw)
-
-        # Priority: news (with source ref) > research > external > existing > original
-        if is_news and not is_internal:
-            route = "VERIFIED"
-            rationale = "Haber kaynağına atıf içeriyor — multi-source doğrulama ile işlenecek."
-            source_type = "multi-source"
-        elif is_research:
-            route = "RESEARCH+IDEATE"
-            rationale = "Keşif odaklı fikir — çıktı post değil, fikir listesi."
-            source_type = "keşif"
-        elif is_external and not is_internal:
-            route = "REWRITE"
-            rationale = "Dış kaynaktan ilham alınmış — kendi sesinle yeniden yazılacak."
-            source_type = "harici"
-        elif is_existing:
-            route = "REPURPOSE"
-            rationale = "Mevcut içerikten türetme — format/platform değişimi."
-            source_type = "mevcut içerik"
-        elif is_internal:
-            route = "ORIGINAL"
-            rationale = "Kişisel deneyim/düşünce — en yüksek değerli içerik tipi."
-            source_type = "kişisel"
-        else:
-            route = "ORIGINAL"
-            rationale = "Net sinyal yok — ORIGINAL varsayıldı. Haber kaynağı varsa VERIFIED kullan."
-            source_type = "belirsiz"
-
-        return {"route": route, "rationale": rationale, "source_type": source_type}
+        """Haberde tek rota vardır: VERIFIED (çok kaynaklı doğrulama)."""
+        return {"route": "VERIFIED", "rationale": "Multi-source verified news.", "source_type": "multi-source"}
 
     # ══════════════════════════════════════════════════════════
-    # 7. RUN OPERATIONS (Updated)
-    # ══════════════════════════════════════════════════════════
-
-    def create_run(self, idea: str, slug: str = None,
-                   source_hint: str = "") -> Dict[str, Any]:
-        """Start a new haber run with route decision.
-        
-        For news items, use create_news_run() instead for full verification.
-        This method is for non-news content (original, repurpose, rewrite).
-        """
-        logger.info("create_run called with idea=%.80r, slug=%r, source_hint=%r", idea, slug, source_hint)
-
-        # Auto-generate slug
-        if not slug:
-            slug = re.sub(r'[^a-z0-9]', '-', idea.lower())[:50]
-            slug = re.sub(r'-+', '-', slug).strip('-')
-            if not slug:
-                slug = f"haber-{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
-            date_prefix = datetime.now().strftime('%Y-%m')
-            slug = f"{date_prefix}-{slug}"
-        else:
-            slug = re.sub(r'[^a-z0-9\-_]', '-', slug.lower())[:50]
-            slug = re.sub(r'-+', '-', slug).strip('-')
-            if not slug:
-                slug = f"custom-{datetime.now().strftime('%Y%m%d%H%M')}"
-            date_prefix = datetime.now().strftime('%Y-%m')
-            if not slug.startswith(date_prefix):
-                slug = f"{date_prefix}-{slug}"
-
-        run_path = self.active_runs / slug
-
-        if run_path.exists():
-            return {"slug": slug, "path": str(run_path),
-                    "status": "exists", "message": "Run already exists"}
-
-        run_path.mkdir(parents=True, exist_ok=True)
-
-        # Route decision
-        route_decision = self.decide_route(idea, source_hint)
-        context = self.get_context_for_run(idea)
-
-        route = route_decision["route"]
-
-        # If this is VERIFIED but not using create_news_run, note it
-        if route == "VERIFIED":
-            route_note = "\n**Note:** Use create_news_run for proper multi-source verification.\n"
-        else:
-            route_note = ""
-
-        # Write haber-object.md
-        obj = f"""# Haber Nesnesi — {slug}
-
-## Meta
-- **ID:** {slug}
-- **Created:** {datetime.now().isoformat()}
-- **Status:** captured
-- **Route:** {route}
-- **Source Type:** {route_decision['source_type']}
-- **Format:** TBD
-- **Pillar:** TBD
-- **Title:** {idea}
-- **Verification Level:** pending
-{route_note}"""
-        (run_path / "haber-object.md").write_text(obj, encoding="utf-8")
-
-        # Write idea.md
-        idea_md = f"""# Idea — {slug}
-
-## Description
-{idea}
-
-## Route Decision
-- **Route:** {route}
-- **Rationale:** {route_decision['rationale']}
-- **Source:** {route_decision['source_type']}
-- **Decision Date:** {datetime.now().isoformat()}
-
-## Route Rules
-- [ ] VERIFIED: Multi-source cross-verification required
-- [ ] ORIGINAL: No external sources, high taste investment
-- [ ] REPURPOSE: Existing content reference specified
-- [ ] REWRITE: Source clearly attributed, credit rules defined
-- [ ] RESEARCH+IDEATE: Output is NOT a post, it's an idea list
-"""
-        (run_path / "idea.md").write_text(idea_md, encoding="utf-8")
-
-        # Write context.md
-        context_md = f"""# Context for: {slug}
-
-## Relevant Proof Elements
-{context.get('proof', 'No proof available')}
-
-## Successful Hook Patterns
-{context.get('hooks', 'No hooks available')}
-
-## Top Performing Runs (for reference)
-{context.get('top_runs', 'No previous runs')}
-
-## Voice Profile Summary
-{context.get('voice', 'No voice profile set')}
-"""
-        (run_path / "context.md").write_text(context_md, encoding="utf-8")
-
-        # Cache state
-        self._state_cache[slug] = RunState(
-            slug=slug,
-            title=idea,
-            state="captured",
-            route=route,
-            format="TBD",
-            pillar="TBD",
-            created=datetime.now().isoformat(),
-            updated=datetime.now().isoformat(),
-            source_type=route_decision["source_type"],
-            verification_level="pending",
-        )
-        self._save_state_cache()
-
-        return {
-            "slug": slug,
-            "path": str(run_path),
-            "route": route,
-            "context_provided": True,
-        }
-
-    def get_context_for_run(self, idea: str) -> Dict[str, str]:
-        """Get relevant context from stores for a new run."""
-        return {
-            "proof": self._get_relevant_proof(idea),
-            "hooks": self._get_successful_hooks(),
-            "top_runs": self._get_top_performing_runs(),
-            "voice": self._get_voice_summary(),
-        }
-
-    # ══════════════════════════════════════════════════════════
-    # 8. STATE MACHINE (Updated 18-state)
+    # 7. STATE MACHINE — 8-State News Lifecycle
     # ══════════════════════════════════════════════════════════
 
     def _valid_transition(self, from_state: str, to_state: str) -> bool:
@@ -1962,7 +1888,7 @@ class HaberKuratorCore:
 
     def update_state(self, slug: str, new_state: str,
                      force: bool = False) -> str:
-        """Update state with 18-state lifecycle validation."""
+        """Update state with 8-state lifecycle validation."""
         logger.info("update_state: slug=%s, new_state=%s, force=%s", slug, new_state, force)
 
         if new_state not in STATE_LIFECYCLE:
@@ -1976,8 +1902,8 @@ class HaberKuratorCore:
 
         # Auto-initialize if missing
         if not obj_path.exists():
-            idea_path = run_path / "idea.md"
-            idea = idea_path.read_text(encoding="utf-8") if idea_path.exists() else slug
+            idea_path = run_path / "haber-object.md"
+            idea = "news-item"
             obj_path.write_text(
                 f"title: {idea}\nstate: {new_state}\n"
                 f"created: {datetime.now().isoformat()}\n"
@@ -2025,8 +1951,6 @@ class HaberKuratorCore:
             title=existing.title,
             state=new_state,
             route=existing.route,
-            format=existing.format,
-            pillar=existing.pillar,
             created=existing.created,
             updated=ts,
             source_type=existing.source_type,
@@ -2044,9 +1968,7 @@ class HaberKuratorCore:
             return "unknown"
 
         # Priority-ordered detection
-        if (run_path / "published").exists():
-            state = "published"
-        elif (run_path / "correction.md").exists():
+        if (run_path / "correction.md").exists():
             content = (run_path / "correction.md").read_text(encoding="utf-8")
             if "## Retraction" in content or "GERİ ÇEKME" in content:
                 state = "retracted"
@@ -2054,26 +1976,8 @@ class HaberKuratorCore:
                 state = "corrected"
             else:
                 state = "correction_needed"
-        elif (run_path / "feedback.md").exists():
-            fb_content = (run_path / "feedback.md").read_text(encoding="utf-8")
-            if "## 72h" in fb_content or "## 72 Saat" in fb_content:
-                state = "feedback_72h"
-            elif "## 24h" in fb_content or "## 24 Saat" in fb_content:
-                state = "feedback_24h"
-            else:
-                state = "learned"
-        elif (run_path / "scheduled").exists():
-            state = "scheduled"
-        elif (run_path / "verifier-report.md").exists():
-            state = "verification"
-        elif (run_path / "draft-package.md").exists():
-            state = "drafting"
-        elif (run_path / "brief.md").exists():
-            state = "brief_ready"
         elif (run_path / "fact-check-report.md").exists():
             state = "cross_verified"
-        elif (run_path / "idea.md").exists():
-            state = "idea_review"
         else:
             state = "captured"
 
@@ -2095,9 +1999,7 @@ class HaberKuratorCore:
         state = m.group(1) if m else "unknown"
         if state != "unknown":
             rs = RunState(slug=slug, state=state)
-            # Read metadata
-            for field, key in [("Route", "route"), ("Format", "format"),
-                                ("Pillar", "pillar"), ("Title", "title")]:
+            for field, key in [("Route", "route"), ("Title", "title")]:
                 fm = re.search(rf'\*{{0,2}}{field}\*{{0,2}}:\*{{0,2}}\s*(.+)', content, re.IGNORECASE)
                 if fm:
                     setattr(rs, key, fm.group(1).strip().lstrip('* '))
@@ -2108,44 +2010,19 @@ class HaberKuratorCore:
         """Return suggested next actions based on current state."""
         state = self.get_state(slug)
         guide = {
-            "captured":          ["Fetch news from sources → run cross-verification",
-                                  "Or: decide route manually with /haber route"],
+            "captured":          ["Fetch & cross-verify news: /haber fetch"],
             "fact_checking":     ["Wait for cross-verification to complete",
-                                  "Check fact-check-report.md for findings"],
-            "cross_verified":    ["News verified! Review fact-check report",
-                                  "Proceed to write brief (context available)"],
-            "idea_review":       ["Read fact-check-report.md and idea.md",
-                                  "Write brief.md (Writer Context Packet)"],
-            "brief_ready":       ["Run Writer Agent to generate draft-package.md"],
-            "drafting":          ["Run Verifier Agent for source-attribution check",
-                                  "Run slop scan"],
-            "verification":      ["Review verifier outcomes",
-                                  "Approve / Request revision / Reject"],
-            "draft_review":      ["APPROVE → scheduler_ready",
-                                  "REVISE → update brief, return to drafting",
-                                  "REJECT → archive or discard"],
-            "approved":          ["Prepare for scheduling (hashtags, timing)"],
-            "scheduler_ready":   ["Schedule via Memos"],
-            "scheduled":         ["Wait for publish time"],
-            "published":         ["Monitor for 24h metrics",
-                                  "Watch for correction needs"],
-            "feedback_24h":      ["Collect 24h metrics → feedback.md",
-                                  "Check for errors/corrections needed"],
-            "feedback_72h":      ["Collect 72h metrics → postmortem",
-                                  "Check for errors/corrections needed"],
-            "learned":           ["Archive the run",
-                                  "OR issue correction if needed"],
+                                  "Check fact-check-report.md"],
+            "cross_verified":    ["Publish to Memos: /haber publish",
+                                  "Or auto-publish: /haber auto-publish"],
+            "published":         ["Monitor for corrections needed",
+                                  "Check: /haber correct if errors found"],
             "correction_needed": ["Write correction.md with accurate info",
                                   "Republish corrected version"],
-            "corrected":         ["Correction published. Monitor feedback.",
-                                  "Transition to learned."],
-            "retracted":         ["Story retracted. Move to archive."],
+            "corrected":         ["Correction published. Archive if done: /haber archive"],
+            "retracted":         ["Story retracted. Archive: /haber archive"],
         }
         return guide.get(state, ["No specific next actions for this state."])
-
-    # ══════════════════════════════════════════════════════════
-    # 9. WRITER AGENT (Updated for Source Attribution)
-    # ══════════════════════════════════════════════════════════
 
     async def generate_brief(self, slug: str, llm: Any = None,
                              extra_context: str = "") -> Dict[str, Any]:
@@ -2818,8 +2695,8 @@ CRITICAL RULES:
                 return f"❌ Run {slug} not found in active or archive."
 
         current_state = self.get_state(slug)
-        if current_state not in ("published", "feedback_24h", "feedback_72h", "learned"):
-            return f"❌ Cannot issue correction in state '{current_state}'. Must be published or later."
+        if current_state not in ("published", "correction_needed"):
+            return f"❌ Cannot issue correction in state '{current_state}'. Must be published first."
 
         # Write correction file
         corr_content = f"""# Correction Notice — {slug}
@@ -3412,6 +3289,11 @@ Return as markdown:
                  if l.strip().startswith(('1.', '2.', '3.', '4.', '5.'))]
         return "\n".join(lines[:5]) if lines else content[:300]
 
+    def enable_gbrain(self):
+        """Enable GBrain integration for enhanced context retrieval."""
+        self.gbrain_enabled = True
+        logger.info("GBrain integration enabled for Haber Kuratör")
+
     def _query_gbrain(self, query: str) -> Dict[str, str]:
         if not self.gbrain_enabled:
             return {}
@@ -3672,6 +3554,21 @@ async def tool_haber_kurator_manager(core: HaberKuratorCore, args: Dict[str, Any
                 ],
             }, indent=2, ensure_ascii=False)
 
+        if action == "search_news":
+            """Search for a specific news topic across multiple sources.
+            
+            Uses Google News RSS search + existing clustering/verification.
+            Supports Turkish and English queries with language/country detection.
+            """
+            query = args.get("search_query", "")
+            if not query:
+                return "❌ 'search_query' parameter is required."
+            max_results = args.get("max_results", 20)
+            language = args.get("language", "tr")
+            country = args.get("country", "TR")
+            result = core.search_news(query, max_results, language, country)
+            return json.dumps(result, indent=2, ensure_ascii=False)
+
         if action == "verify_news":
             """Fetch, cluster, and cross-verify all news from sources."""
             category = args.get("category")
@@ -3697,7 +3594,6 @@ async def tool_haber_kurator_manager(core: HaberKuratorCore, args: Dict[str, Any
 
         if action == "cross_verify_story":
             """Cross-verify a specific story cluster."""
-            # Expecting cluster_data as dict in args
             cluster_data = args.get("cluster_data", {})
             if not cluster_data:
                 return "❌ cluster_data required"
@@ -3737,9 +3633,6 @@ async def tool_haber_kurator_manager(core: HaberKuratorCore, args: Dict[str, Any
             )
 
         # Run actions
-        if action == "new_run":
-            return json.dumps(core.create_run(
-                args.get("idea", ""), args.get("slug"), args.get("source_hint", "")))
         if action == "update_state":
             return core.update_state(slug, args.get("state"))
         if action == "get_state":
@@ -3752,44 +3645,11 @@ async def tool_haber_kurator_manager(core: HaberKuratorCore, args: Dict[str, Any
         if action == "get_next_actions":
             return json.dumps(core.get_next_actions(slug))
 
-        # Idea Gate
-        if action == "decide_route":
-            return json.dumps(core.decide_route(args.get("idea", ""), args.get("source_hint", "")))
-
-        # Agent Pipeline
-        if action == "generate_brief":
-            llm = kwargs.get("parent_agent")
-            llm_obj = llm.ctx.llm if llm and hasattr(llm, "ctx") else None
-            res = await core.generate_brief(slug, llm_obj, args.get("extra_context", ""))
-            return json.dumps(res)
-        if action == "generate_draft":
-            llm = kwargs.get("parent_agent")
-            llm_obj = llm.ctx.llm if llm and hasattr(llm, "ctx") else None
-            res = await core.generate_draft(slug, llm_obj)
-            return json.dumps(res)
-        if action == "run_verifier":
-            llm = kwargs.get("parent_agent")
-            llm_obj = llm.ctx.llm if llm and hasattr(llm, "ctx") else None
-            res = await core.run_verifier(slug, llm_obj)
-            return json.dumps(res)
-
-        # Quality
-        if action == "score":
-            llm = kwargs.get("parent_agent")
-            llm_obj = llm.ctx.llm if llm and hasattr(llm, "ctx") else None
-            res = await core.evaluate_rubric(slug, llm_obj)
-            return json.dumps(res)
-
-        # Signals
-        if action == "signal":
-            return json.dumps(core.process_signal(args.get("source", "x")))
-
         # Writer Agent — Auto Publish
         if action == "auto_publish":
             try:
                 from .writer_agent import WriterAgent
                 agent = WriterAgent(core)
-                # Pass Hermes Agent LLM for Turkish translation
                 llm = kwargs.get("parent_agent")
                 llm_obj = llm.ctx.llm if llm and hasattr(llm, "ctx") else None
                 if llm_obj:
@@ -3801,24 +3661,6 @@ async def tool_haber_kurator_manager(core: HaberKuratorCore, args: Dict[str, Any
                 return json.dumps(results, indent=2, ensure_ascii=False)
             except Exception as e:
                 return f"Error in auto_publish: {str(e)}"
-
-        # Postmortem
-        if action == "postmortem":
-            metrics = args.get("metrics", {})
-            llm = kwargs.get("parent_agent")
-            llm_obj = llm.ctx.llm if llm and hasattr(llm, "ctx") else None
-            res = await core.run_postmortem(slug, metrics, llm_obj)
-            return json.dumps(res)
-
-        # Voice
-        if action == "update_voice":
-            return core.update_voice_profile(args.get("updates", {}))
-
-        # Learnings
-        if action == "get_learnings":
-            return core.get_learnings_for_brief(args.get("topic"))
-        if action == "analyze_patterns":
-            return json.dumps(core.analyze_run_patterns())
 
         # Search
         if action == "search_runs":

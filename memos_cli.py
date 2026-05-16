@@ -17,7 +17,7 @@ def load_env():
 
 def post_memo(content, tags=None, visibility="PUBLIC"):
     load_env()
-    url = os.environ.get("MEMOS_API_URL", "https://memos.googig.cloud/api/v1/memo")
+    url = os.environ.get("MEMOS_API_URL", "https://memos.googig.cloud/api/v1/memos")
     token = os.environ.get("MEMOS_TOKEN")
     
     if not token:
