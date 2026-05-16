@@ -279,7 +279,7 @@ def register(ctx: Any) -> None:
                 _cat = "news"
 
             # Niyet tespiti (kelime sınırı ile)
-            _has_fetch = bool(__import__("re").search(r'\b(getir|çek|fetch|ara|bul|göster|indir)\b', _full_lower))
+            _has_fetch = bool(__import__("re").search(r'\b(getir|çek|fetch|ara|bul|indir)\b', _full_lower))
             _has_verify = bool(__import__("re").search(r'\b(doğrula|verify|kontrol|teyit|onayla|incele|doğrulama)\b', _full_lower))
             _has_publish = bool(__import__("re").search(r'\b(yayınla|publish|paylaş|gönder|post|bas)\b', _full_lower))
             _has_auto = bool(__import__("re").search(r'\b(otomatik|auto|full|tüm|tam)\b', _full_lower))
@@ -425,11 +425,27 @@ def register(ctx: Any) -> None:
             """List all configured news sources."""
             return core.get_source_summary()
 
+        if sub == "publish":
+            """Fetch, verify & create news runs."""
+            category = argv[1] if len(argv) > 1 and argv[1] in ("news", "technology", "business", "science") else None
+            limit = int(argv[2]) if len(argv) > 2 and argv[2].isdigit() else 5
+            auto = "--auto" in argv
+            items = core.fetch_all_news(category)
+            clusters = core.cluster_stories(items)
+            results = []
+            for c in sorted(clusters, key=lambda x: x.get("source_count", 0), reverse=True)[:limit]:
+                results.append(core.publish_verified_news(c, human_review=not auto))
+            lines = [f"### 📰 Publish Results ({len(results)} stories)", ""]
+            for r in results:
+                status_icon = "✅" if r.get("status") != "exists" else "⏭️"
+                lines.append(f"{status_icon} **{r.get('slug', '?')}** — {r.get('route', '?')}")
+            return "\n".join(lines)
+
         if sub == "auto-publish":
             """Writer Agent: auto-fetch, verify, generate & publish directly."""
             limit = int(argv[1]) if len(argv) > 1 and argv[1].isdigit() else 5
             category = argv[2] if len(argv) > 2 and argv[2] in ("news", "technology", "business", "science") else None
-            from writer_agent import WriterAgent
+            from .writer_agent import WriterAgent
             agent = WriterAgent(core)
             results = agent.auto_publish(max_articles=limit, category=category)
             lines = [f"### 🤖 Writer Agent — {results['published']} haber yayınlandı", ""]
