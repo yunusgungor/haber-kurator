@@ -12,5 +12,5 @@
 - **Verification Level:** 1
 - **Verified Sources:** 9
 
-state: cross_verified
-updated: 2026-05-17T00:02:29.685487
+state: retracted
+updated: 2026-05-17T00:15:57.794430
