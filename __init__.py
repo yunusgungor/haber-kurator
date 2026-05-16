@@ -255,7 +255,7 @@ def register(ctx: Any) -> None:
                            "brief", "draft", "verify-draft", "scan", "score", "audit",
                            "setup", "signal", "postmortem", "route", "state", "archive",
                            "learnings", "patterns", "runs", "context", "voice-update",
-                           "sources", "post", "publish", "auto-publish"}
+                           "sources", "post", "publish", "auto-publish", "search"}
 
         if sub not in _KNOWN_COMMANDS:
             _full_lower = args.strip().lower()
