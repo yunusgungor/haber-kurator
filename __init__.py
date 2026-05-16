@@ -239,6 +239,121 @@ def register(ctx: Any) -> None:
 
         sub = argv[0]
 
+        # ══════════════════════════════════════════════════════════════
+        # NATURAL LANGUAGE PROCESSING — Türkçe doğal dil anlama
+        #
+        # Örnekler:
+        #   /haber teknoloji haberlerini getir    → fetch technology
+        #   /haber ekonomi haberlerini doğrula    → verify business
+        #   /haber son dakika haberlerini yayınla → publish news
+        #   /haber bilim haberlerini otomatik yayınla → auto-publish science
+        #   /haber haberleri getir ve doğrula      → fetch + verify
+        #   /haber kaynakları listele              → sources
+        # ══════════════════════════════════════════════════════════════
+
+        _KNOWN_COMMANDS = {"status", "new", "fetch", "verify", "correct", "hallucination",
+                           "brief", "draft", "verify-draft", "scan", "score", "audit",
+                           "setup", "signal", "postmortem", "route", "state", "archive",
+                           "learnings", "patterns", "runs", "context", "voice-update",
+                           "sources", "post", "publish", "auto-publish"}
+
+        if sub not in _KNOWN_COMMANDS:
+            _full_lower = args.strip().lower()
+
+            # Türkçe → İngilizce kategori eşleme (özgül olan önce)
+            _cat = None
+            for _pattern, _en_cat in [
+                (r'teknoloji', "technology"), (r'\btech\b', "technology"),
+                (r'ekonomi', "business"), (r'finans', "business"), (r'piyasa', "business"),
+                (r'bilim', "science"), (r'araştırma', "science"), (r'\bscience\b', "science"),
+                (r'gündem', "news"),
+            ]:
+                if __import__("re").search(_pattern, _full_lower):
+                    _cat = _en_cat
+                    break
+            # Generic 'haber' fallback (Türkçe ekler için substring)
+            if _cat is None and "haber" in _full_lower:
+                _cat = "news"
+            # 'son dakika' override
+            if "son dakika" in _full_lower:
+                _cat = "news"
+
+            # Niyet tespiti (kelime sınırı ile)
+            _has_fetch = bool(__import__("re").search(r'\b(getir|çek|fetch|ara|bul|göster|indir)\b', _full_lower))
+            _has_verify = bool(__import__("re").search(r'\b(doğrula|verify|kontrol|teyit|onayla|incele|doğrulama)\b', _full_lower))
+            _has_publish = bool(__import__("re").search(r'\b(yayınla|publish|paylaş|gönder|post|bas)\b', _full_lower))
+            _has_auto = bool(__import__("re").search(r'\b(otomatik|auto|full|tüm|tam)\b', _full_lower))
+            _has_sources = "kaynak" in _full_lower or bool(__import__("re").search(r'\bsources\b', _full_lower))
+            _has_verify_only = _has_verify and not _has_fetch and not _has_publish
+
+            # ── Niyet → Aksiyon eşleme ──
+
+            # Kaynak listesi isteniyorsa
+            if _has_sources and not _has_fetch and not _has_verify:
+                return core.get_source_summary()
+
+            # Otomatik yayın (tam pipeline)
+            if _has_auto and _has_publish:
+                from .writer_agent import WriterAgent
+                agent = WriterAgent(core)
+                try:
+                    from agent.auxiliary_client import async_call_llm
+                    agent.set_llm(True)
+                except ImportError:
+                    pass
+                results = agent.auto_publish(max_articles=5, category=_cat)
+                lines = [f"### 🤖 Writer Agent — {results['published']} haber yayınlandı", ""]
+                for a in results.get("articles", []):
+                    badge = "✅" if a.get("level") == "CONFIRMED" else "🟡"
+                    lines.append(f"{badge} **{a.get('title', '?')[:80]}**")
+                if results.get("skipped", 0) > 0:
+                    lines.append(f"\n⏭️ {results['skipped']} haber atlandı")
+                if results.get("failed", 0) > 0:
+                    lines.append(f"\n❌ {results['failed']} haber başarısız")
+                return "\n".join(lines)
+
+            # Sadece doğrulama isteniyorsa
+            if _has_verify_only:
+                items = core.fetch_all_news(_cat)
+                clusters = core.cluster_stories(items)
+                top = sorted(clusters, key=lambda c: c["source_count"], reverse=True)[:10]
+                lines = [f"### 🔍 Cross-Verification Results ({len(clusters)} clusters)", ""]
+                for c in top:
+                    ver = core.cross_verify_story(c)
+                    badge = "✅" if ver.is_safe_to_publish else "⚠️"
+                    lines.append(f"{badge} **{c['story_title'][:80]}**")
+                    lines.append(f"   Level: {ver.verification_level.label}")
+                    lines.append(f"   Sources: {ver.sources_checked}")
+                    lines.append("")
+                return "\n".join(lines)
+
+            # Yayınla isteniyorsa (verify + publish)
+            if _has_publish:
+                items = core.fetch_all_news(_cat)
+                clusters = core.cluster_stories(items)
+                results = []
+                for c in sorted(clusters, key=lambda x: x["source_count"], reverse=True)[:5]:
+                    results.append(core.publish_verified_news(c, human_review=not _has_auto))
+                lines = [f"### 📰 Publish Results ({len(results)} stories)", ""]
+                for r in results:
+                    status_icon = "✅" if r.get("status") != "exists" else "⏭️"
+                    lines.append(f"{status_icon} **{r.get('slug', '?')}** — {r.get('route', '?')}")
+                return "\n".join(lines)
+
+            # Varsayılan: fetch + sonuçları göster
+            items = core.fetch_all_news(_cat)
+            clusters = core.cluster_stories(items)
+            top = sorted(clusters, key=lambda c: c["source_count"], reverse=True)[:10]
+            lines = [f"### 📡 News Fetched ({len(items)} items, {len(clusters)} clusters)", ""]
+            for i, c in enumerate(top, 1):
+                tiers = c["tier_count"]
+                tier_badges = f"T0:{tiers.get('primary',0)} T1:{tiers.get('major',0)}"
+                lines.append(f"{i}. **{c['story_title'][:90]}**")
+                lines.append(f"   Sources: {c['source_count']} | {tier_badges}")
+                lines.append(f"   URL: {c.get('best_url', 'N/A')}")
+                lines.append("")
+            return "\n".join(lines)
+
         # ── News Verification Commands (NEW) ──
 
         if sub == "fetch":
