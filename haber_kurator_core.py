@@ -2101,7 +2101,8 @@ class HaberKuratorCore:
 
         content = obj_path.read_text(encoding="utf-8")
         current_state = "captured"
-        m = re.search(r'state:\s*(\w+)', content)
+        # Support both "state:" and "Status:" field names
+        m = re.search(r'(?:state|Status|status):\s*(\w+)', content)
         if m:
             current_state = m.group(1)
 
@@ -2110,9 +2111,15 @@ class HaberKuratorCore:
             allowed = STATE_TRANSITIONS.get(current_state, ["any"])
             return f"❌ Invalid transition: {current_state} → {new_state}. Allowed: {allowed}"
 
-        # Update state in haber-object.md
-        if "state:" in content:
-            new_content = re.sub(r"state:\s*\w+", f"state: {new_state}", content)
+        # Update state in haber-object.md — handle all field formats:
+        # "state: published", "Status: published", "- **Status:** published"
+        state_field_pattern = r"(?i)(- \*\*)?(status|state)(\*\*)?:\s*\w+"
+        if re.search(state_field_pattern, content):
+            new_content = re.sub(
+                state_field_pattern,
+                lambda m: f"{m.group(1) or ''}{m.group(2)}{m.group(3) or ''}: {new_state}",
+                content,
+            )
         else:
             new_content = content + f"\nstate: {new_state}"
 
