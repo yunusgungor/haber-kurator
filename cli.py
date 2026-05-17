@@ -119,7 +119,7 @@ def register_cli(haber_parser, core: HaberKuratorCore):
                 ver = verified_map.get(c["story_title"])
                 badge = "✅" if ver and ver.is_safe_to_publish else "⚠️"
                 tiers = c["tier_count"]
-                tier_str = f"T0:{tiers.get('primary',0)} T1:{tiers.get('major',0)}"
+                tier_str = f"T0:{tiers.get('primary', 0)} T1:{tiers.get('major', 0)}"
                 table.add_row(str(i), c["story_title"][:70], str(c["source_count"]), tier_str, badge)
             console.print(table)
 
@@ -137,8 +137,10 @@ def register_cli(haber_parser, core: HaberKuratorCore):
             console.print(f"[bold cyan]🔍 Cross-Verification Report[/bold cyan]")
             console.print(f"  {len(items)} items → {len(clusters)} clusters\n")
             table = Table(title=f"Verification Results (top {limit})")
-            table.add_column("#"); table.add_column("Title", no_wrap=False)
-            table.add_column("Level", style="yellow"); table.add_column("Sources", style="cyan")
+            table.add_column("#")
+            table.add_column("Title", no_wrap=False)
+            table.add_column("Level", style="yellow")
+            table.add_column("Sources", style="cyan")
             table.add_column("Publish?", style="green bold")
             for i, (c, ver) in enumerate(verifications, 1):
                 publish = "✅ YES" if ver.is_safe_to_publish else "⛔ NO"

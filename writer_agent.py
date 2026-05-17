@@ -5,7 +5,12 @@ Generates proper Turkish [Özet] - [Detaylar] - [Kaynak] formatted news
 articles from verified story clusters and publishes them to Memos.
 """
 
-import os, json, urllib.request, re, time, logging
+import os
+import json
+import urllib.request
+import re
+import time
+import logging
 from pathlib import Path
 from datetime import datetime
 from typing import Optional
@@ -15,7 +20,7 @@ from haber_kurator_core import HaberKuratorCore, VerificationLevel
 
 class WriterAgent:
     """Automated Writer Agent that generates Turkish news content from verified clusters.
-    
+
     Uses Hermes Agent's built-in LLM for Turkish content generation when available.
     Falls back to template-based Turkish output (with English headlines) when LLM unavailable.
     """
@@ -107,6 +112,8 @@ class WriterAgent:
         Returns:
             Turkish article string, or None if LLM unavailable.
         """
+        from datetime import datetime
+        current_date = datetime.now().strftime("%B %Y")
         title = cluster["story_title"]
         items = cluster["items"]
         sources = list(set(cluster["sources"]))
@@ -118,6 +125,10 @@ class WriterAgent:
 
         system = (
             "You are a professional Turkish news editor for a respected news agency. "
+            f"Current date: {current_date}. "
+            "IMPORTANT: Use current political context. "
+            "As of May 2026, Donald Trump is the current/incumbent US President (re-elected in 2025). "
+            "Do NOT refer to him as 'former president' or 'eski başkan'.\n\n"
             "Write a concise news article in Turkish based on the verified sources below.\n\n"
             "FORMAT (use exactly these section headers):\n"
             "[Özet]\n"
@@ -144,7 +155,7 @@ class WriterAgent:
         )
 
         article = self._call_llm(system, user, timeout=60)
-        if article and "[Özet]" in article:
+        if article and ("[Özet]" in article or "Özet" in article[:100]):
             return article
         return None
 
@@ -160,7 +171,7 @@ class WriterAgent:
 
     def generate_news(self, cluster: dict) -> str:
         """Generate a complete news article from a verified story cluster.
-        
+
         FIRST: Tries to generate a full Turkish article via LLM (_generate_turkish_summary).
         FALLBACK: Produces Turkish [Özet] - [Detaylar] - [Kaynak] formatted output with
         translated title. Only source names and URLs stay in original language.
@@ -176,10 +187,10 @@ class WriterAgent:
         tiers = cluster.get("tier_count", {})
         best_url = cluster.get("best_url", "")
         title = cluster["story_title"]
-        
+
         # Translate title to Turkish if LLM available
         tr_title = self._translate_headline(title)
-        
+
         primary_names = sorted(set(
             i.source_name for i in items if i.source_tier.value == 0
         ))
@@ -197,17 +208,17 @@ class WriterAgent:
             kaynak_desc = f"{n_src} ayrı kaynak tarafından doğrulandı"
         else:
             kaynak_desc = f"{n_src} kaynak tarafından doğrulandı"
-        
+
         # Counts
         p_count = tiers.get("primary", 0)
         m_count = tiers.get("major", 0)
-        
+
         # Build Turkish news article — NO raw English RSS text!
         article = ""
-        
+
         # Özet section — Turkish context around title
         article += "[Özet] "
-        
+
         # Determine news category for Turkish context
         has_politics = any(kw in title.lower() for kw in ['trump', 'china', 'russia', 'ukraine', 'iran',
                           'president', 'election', 'senate', 'congress', 'minister',
@@ -239,7 +250,7 @@ class WriterAgent:
                          'jwst', 'hubble', 'mars', 'lunar', 'solar', 'particle',
                          'carbon', 'emissions', 'renewable', 'solar', 'wind',
                          'fusion', 'reactor', 'cern', 'nobel'])
-        
+
         if has_politics:
             article += "Siyasi gelişmeler: "
         elif has_health:
@@ -250,14 +261,14 @@ class WriterAgent:
             article += "Ekonomi: "
         elif has_science:
             article += "Bilim: "
-        
+
         article += f"{tr_title}"
         article += "\n\n"
-        
+
         # Detaylar section — Turkish bullet points
         article += "[Detaylar]\n"
         article += f"- Bu haber, {kaynak_desc}.\n"
-        
+
         # Source names in Turkish context
         all_src_names = []
         if primary_names:
@@ -266,7 +277,7 @@ class WriterAgent:
             all_src_names.extend(major_names[:4])
         if all_src_names:
             article += f"- Başlıca kaynaklar: {', '.join(all_src_names)}.\n"
-        
+
         # Verification level description in Turkish
         if p_count >= 2:
             article += f"- Haber, {p_count} farklı haber ajansı tarafından doğrulandı (en yüksek güvenilirlik seviyesi).\n"
@@ -276,7 +287,7 @@ class WriterAgent:
             article += "- Haber, birden fazla büyük yayıncı tarafından teyit edildi.\n"
         elif n_src >= 2:
             article += f"- Haber, {n_src} farklı kaynakta yer alıyor.\n"
-        
+
         # Category-specific Turkish descriptions
         if has_politics:
             article += "- Bu gelişme, uluslararası ilişkiler ve küresel siyaset açısından önem taşıyor.\n"
@@ -284,9 +295,9 @@ class WriterAgent:
             article += "- Sağlık yetkilileri gelişmeleri yakından takip ediyor.\n"
         if has_economy:
             article += "- Gelişme, piyasalar ve ekonomik göstergeler üzerinde etkili olabilir.\n"
-        
+
         article += "\n"
-        
+
         # Kaynak section — source names with URLs (original language is fine)
         article += "[Kaynak]\n"
         seen_urls = set()
@@ -296,7 +307,7 @@ class WriterAgent:
                 article += f"- {i.source_name}: {i.url}\n"
         if best_url and best_url not in seen_urls:
             article += f"- Kaynak: {best_url}\n"
-        
+
         # Turkish tags
         article += "\n#Haber"
         if p_count >= 2:
@@ -310,7 +321,7 @@ class WriterAgent:
             article += " #Bilim"
         if has_politics:
             article += " #Siyaset"
-        
+
         return article
 
     def post_to_memos(self, content: str, tags: str = "") -> Optional[str]:
@@ -424,7 +435,7 @@ class WriterAgent:
                 _logger.info(f"     ⏭️  Already exists")
                 results["skipped"] += 1
                 continue
-            
+
             # Step 2: Write brief
             src_lines = ", ".join(list(set(c["sources"]))[:5])
             brief = f"""# Writer Context Packet — {slug}
@@ -453,14 +464,14 @@ Sources: {src_lines}
 Target: 12/12
 """
             (self.core.active_runs / slug / "brief.md").write_text(brief, encoding="utf-8")
-            
+
             # Step 3: Generate news article
             article = self.generate_news(c)
-            
+
             # Step 4: Run slop scan and calculate real rubric score
             slop_result = self.core.scan_slop(article)
             total_slop = slop_result['tier1_count'] + slop_result['tier2_count'] + slop_result['tier3_count'] + slop_result['bonus_count']
-            
+
             # Dynamic scoring based on actual content quality
             has_ozet = "[Özet]" in article
             has_detaylar = "[Detaylar]" in article
@@ -473,7 +484,7 @@ Target: 12/12
             source_score = 2 if has_kaynak else 0
             clickbait_score = 2
             total_rubric = format_score + slop_quality + length_score + info_density + source_score + clickbait_score
-            
+
             # Write draft-package.md with dynamic rubric
             draft = f"""---
 draft:
@@ -496,10 +507,10 @@ source_attribution_check:
 - Sources approved: yes
 """
             (self.core.active_runs / slug / "draft-package.md").write_text(draft, encoding="utf-8")
-            
+
             # Step 5: Update state to published
             self.core.update_state(slug, "published")
-            
+
             # Step 6: Post to Memos — returns memo_id if successful
             memo_id = self.post_to_memos(article)
             if memo_id:
@@ -512,9 +523,9 @@ source_attribution_check:
                 })
             else:
                 results["failed"] += 1
-            
+
             time.sleep(1)  # Rate limit
-        
+
         return results
 
 
@@ -525,23 +536,23 @@ def main():
     parser.add_argument("--category", choices=["news", "technology", "business", "science"],
                         help="Category filter")
     args = parser.parse_args()
-    
+
     core = HaberKuratorCore(Path(__file__).parent)
     agent = WriterAgent(core)
-    
+
     results = agent.auto_publish(max_articles=args.limit, category=args.category)
-    
-    print(f"\n{'='*50}")
+
+    print(f"\n{'=' * 50}")
     print(f"📊 RAPOR")
     print(f"   Yayınlanan: {results['published']}")
     print(f"   Atlanan:    {results['skipped']}")
     print(f"   Başarısız:  {results['failed']}")
-    print(f"{'='*50}")
-    
+    print(f"{'=' * 50}")
+
     for a in results["articles"]:
         badge = "✅" if a["level"] == "CONFIRMED" else "🟡"
         print(f"   {badge} {a['title'][:70]}")
-    
+
     return results
 
 

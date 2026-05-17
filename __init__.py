@@ -24,6 +24,16 @@ logger = logging.getLogger(__name__)
 
 VERSION = "3.1.0"
 
+# Modules to force-reload in command handlers (picks up code changes in active agent)
+_RELOAD_TARGETS = ['haber_kurator_core', 'writer_agent', 'memos_cli']
+
+
+def _reload_modules():
+    for _m in _RELOAD_TARGETS:
+        _full = f"plugins.haber_kurator.{_m}"
+        if _full in __sys.modules:
+            importlib.reload(__sys.modules[_full])
+
 
 def register(ctx: Any) -> None:
     root = Path(__file__).parent
@@ -259,13 +269,13 @@ def register(ctx: Any) -> None:
             for i, c in enumerate(top, 1):
                 tiers = c["tier_count"]
                 badge = "✅" if tiers.get("primary", 0) >= 2 else "🟡"
-                tier_str = f"T0:{tiers.get('primary',0)} T1:{tiers.get('major',0)}"
+                tier_str = f"T0:{tiers.get('primary', 0)} T1:{tiers.get('major', 0)}"
                 extra.append(f"{badge} **{i}.** {c['story_title'][:90]}")
                 extra.append(f"   Kaynak: {c['source_count']} | {tier_str}")
                 extra.append(f"   URL: {c.get('best_url', 'N/A')}")
                 extra.append("")
             if len(clusters) > 10:
-                extra.append(f"   _+{len(clusters)-10} küme daha_")
+                extra.append(f"   _+{len(clusters) - 10} küme daha_")
             return _t.report(extra)
 
         if sub in ("ara", "search"):
@@ -277,8 +287,10 @@ def register(ctx: Any) -> None:
             country = "TR"
             for a in argv[1:]:
                 if a.startswith("--max="):
-                    try: max_results = int(a.split("=", 1)[1])
-                    except ValueError: pass
+                    try:
+                        max_results = int(a.split("=", 1)[1])
+                    except ValueError:
+                        pass
                 elif a.startswith("--language="):
                     language = a.split("=", 1)[1]
                 elif a.startswith("--country="):
@@ -330,11 +342,15 @@ def register(ctx: Any) -> None:
                 return _t.report([f"\n❌ {len(items)} haber maddesinden küme oluşmadı. Kaynaklar geçici olarak erişilemez olabilir."])
             ctx.reply(f"✅ {len(clusters)} küme oluşturuldu. {limit} haber doğrulanıyor...")
             _t.begin(f"En yüksek puanlı {limit} haber doğrulanıyor")
-            verified_count = 0; blocked_count = 0; verified_list = []
+            verified_count = 0
+            blocked_count = 0
+            verified_list = []
             for cluster in clusters[:limit]:
                 verification = core.cross_verify_story(cluster)
-                if verification.is_safe_to_publish: verified_count += 1
-                else: blocked_count += 1
+                if verification.is_safe_to_publish:
+                    verified_count += 1
+                else:
+                    blocked_count += 1
                 verified_list.append((cluster, verification))
             _t.end()
             ctx.reply(f"✅ Doğrulama tamamlandı: ✅ {verified_count} yayınlanabilir | ⛔ {blocked_count} bloke")
@@ -420,12 +436,8 @@ def register(ctx: Any) -> None:
 
         if sub == "auto-publish":
             # Force module reload to pick up code changes (Python module cache)
-            _reload_mods = ['haber_kurator_core', 'writer_agent']
-            for _m in _reload_mods:
-                _full = f"plugins.haber_kurator.{_m}"
-                if _full in __sys.modules:
-                    importlib.reload(__sys.modules[_full])
-            
+            _reload_modules()
+
             limit = int(argv[1]) if len(argv) > 1 and argv[1].isdigit() else 5
             category = argv[2] if len(argv) > 2 and argv[2] in ("news", "technology", "business", "science") else None
             _t = _StageTracker("🤖 Writer Agent — Otomatik Yayın")
@@ -453,7 +465,8 @@ def register(ctx: Any) -> None:
             if not runs.exists():
                 return "📭 Henüz hiç run oluşturulmamış."
             lines = ["### 📊 Aktif Run Durumları", ""]
-            total = 0; state_counts = {}
+            total = 0
+            state_counts = {}
             for r in runs.iterdir():
                 if r.is_dir():
                     total += 1

@@ -12,5 +12,5 @@
 - **Verification Level:** 2
 - **Verified Sources:** 2
 
-state: published
-updated: 2026-05-17T07:45:36.030461
+state: cross_verified
+updated: 2026-05-17T09:02:31.371944

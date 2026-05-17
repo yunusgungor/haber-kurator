@@ -53,9 +53,10 @@ CONFIG = {
 # SOURCE CREDIBILITY SYSTEM
 # ══════════════════════════════════════════════════════════════
 
+
 class SourceTier(Enum):
     """Credibility tiers for news sources.
-    
+
     Tier 0 (PRIMARY):   Wire services — Reuters, AP, AFP. Gold standard.
     Tier 1 (MAJOR):     Major newspapers & broadcasters with editorial standards.
     Tier 2 (SPECIALIZED): Topic-specific but reputable (tech, science, finance).
@@ -64,7 +65,7 @@ class SourceTier(Enum):
     PRIMARY = 0       # Reuters, AP, AFP — highest credibility
     MAJOR = 1         # Bloomberg, WSJ, FT, BBC, Guardian, etc.
     SPECIALIZED = 2   # TechCrunch, Nature, MIT Tech Review, etc.
-    SUPPLEMENTARY = 3 # Regional/local trusted outlets
+    SUPPLEMENTARY = 3  # Regional/local trusted outlets
 
     @property
     def confidence_label(self) -> str:
@@ -83,7 +84,7 @@ class SourceTier(Enum):
 
 class VerificationLevel(Enum):
     """Cross-verification confidence levels.
-    
+
     CONFIRMED:         2+ Tier 0 sources agree → highest confidence
     HIGH_CONFIDENCE:   1 Tier 0 + 1 Tier 1 agree
     MEDIUM_CONFIDENCE: 2+ Tier 1 sources agree
@@ -148,7 +149,7 @@ class NewsSource:
 @dataclass
 class FactClaim:
     """A single factual claim extracted from a news story.
-    
+
     Each claim maps back to the source(s) that reported it.
     """
     claim_text: str              # The factual claim
@@ -835,6 +836,7 @@ FULL_SLOP_BONUS = [
 # EXCEPTIONS
 # ══════════════════════════════════════════════════════════════
 
+
 class HaberKuratorError(Exception):
     """Base exception for Haber Kuratör."""
     pass
@@ -900,7 +902,7 @@ class FetchedNewsItem:
 
 class HaberKuratorCore:
     """Haber Kuratör v3.1.0 — News Verification Engine.
-    
+
     Transforms raw news from world-leading sources into verified,
     source-attributed news content through multi-source cross-verification,
     fact-checking, and hallucination protection.
@@ -1005,7 +1007,7 @@ class HaberKuratorCore:
 
     def _load_state_cache(self):
         """Load state cache from SQLite.
-        
+
         Also migrates legacy JSON cache if present.
         Disabled when cache_enabled config is False.
         """
@@ -1112,13 +1114,13 @@ class HaberKuratorCore:
 
     def fetch_all_news(self, category: str = None) -> List[FetchedNewsItem]:
         """Fetch latest news from ALL configured sources.
-        
+
         Pulls from every source that has RSS feeds defined.
         Returns deduplicated list of news items.
-        
+
         Args:
             category: Optional filter ('news', 'technology', 'business', 'science')
-            
+
         Returns:
             List of FetchedNewsItem with source and URL.
         """
@@ -1146,7 +1148,7 @@ class HaberKuratorCore:
 
         # Deduplicate by title similarity
         unique = self._deduplicate_news(all_items)
-        
+
         # Filter out promotional/non-news content
         promo_patterns = [
             r"(?:discount|promo|code|coupon|voucher|save\s+\d+%|up\s+to\s+\d+%|off\s+sitewide)",
@@ -1159,9 +1161,9 @@ class HaberKuratorCore:
             is_promo = any(re.search(p, title_lower) for p in promo_patterns)
             if not is_promo:
                 filtered.append(item)
-        
+
         logger.info(f"fetch_all_news: {len(all_items)} raw, {len(unique)} unique, "
-                    f"{len(unique)-len(filtered)} promo filtered, {len(filtered)} final. "
+                    f"{len(unique) - len(filtered)} promo filtered, {len(filtered)} final. "
                     f"{len(errors)} fetch errors.")
         return filtered
 
@@ -1277,7 +1279,7 @@ class HaberKuratorCore:
 
     def cluster_stories(self, items: List[FetchedNewsItem]) -> List[Dict[str, Any]]:
         """Group similar news items by story (same event across sources).
-        
+
         Uses keyword overlap with cross-language support (English/Turkish).
         Common news words in both languages are normalized for matching.
         Returns list of clusters, each with the story variants grouped.
@@ -1330,7 +1332,7 @@ class HaberKuratorCore:
                 'İ': 'i', 'Ğ': 'g', 'Ü': 'u', 'Ş': 's', 'Ö': 'o', 'Ç': 'c',
             })
             t = t.translate(char_map)
-            
+
             bilingual_words = []
             for word in t.split():
                 if len(word) < 3:
@@ -1349,7 +1351,7 @@ class HaberKuratorCore:
                 else:
                     # Keep proper nouns (capitalized-ish original tokens), numbers
                     bilingual_words.append(word)
-            
+
             return " ".join(bilingual_words)
 
         clusters: List[Dict[str, Any]] = []
@@ -1432,11 +1434,11 @@ class HaberKuratorCore:
 
     def cross_verify_story(self, cluster: Dict[str, Any]) -> CrossVerificationResult:
         """Cross-verify a story cluster across all reporting sources.
-        
+
         Extracts factual claims (numbers, dates, named entities) from each
         source's summary and compares them across sources to identify which
         specific facts are confirmed by independent reporting.
-        
+
         A claim is "verified" when 2+ independent sources report the same fact.
         """
         sources = cluster["sources"]
@@ -1467,7 +1469,7 @@ class HaberKuratorCore:
 
         def _extract_claims(text: str) -> List[str]:
             """Extract potential factual claims from text.
-            
+
             Uses named entity recognition (capitalized proper nouns) to identify
             key people, places, organizations, and specific terms that uniquely
             identify a news story across different sources.
@@ -1934,7 +1936,7 @@ class HaberKuratorCore:
 
     def create_news_run(self, cluster: Dict[str, Any]) -> Dict[str, Any]:
         """Create a verified news run from a story cluster.
-        
+
         Runs cross-verification, creates the run folder with fact-check report.
         Only proceeds if verification meets minimum threshold.
         """
@@ -2030,7 +2032,7 @@ class HaberKuratorCore:
 
     def publish_verified_news(self, cluster: Dict[str, Any], human_review: bool = True) -> Dict[str, Any]:
         """One-step: verify + create run + auto-publish if verified.
-        
+
         For fully automated news ingestion with verification gate.
         """
         result = self.create_news_run(cluster)
@@ -2215,7 +2217,7 @@ class HaberKuratorCore:
     async def generate_brief(self, slug: str, llm: Any = None,
                              extra_context: str = "") -> Dict[str, Any]:
         """Generate a Writer Context Packet (brief.md) using LLM.
-        
+
         For news items, includes source attribution requirements.
         """
         run_path = self.active_runs / slug
@@ -2379,7 +2381,7 @@ Return ONLY the markdown brief. No extra commentary."""
 
     async def generate_draft(self, slug: str, llm: Any = None) -> Dict[str, Any]:
         """Generate draft-package.md using the Writer Agent with source enforcement.
-        
+
         For VERIFIED news: ALL facts must be traceable to sources in the brief.
         Hallucination guard: LLM is instructed to ONLY use facts from sources.
         """
@@ -2728,7 +2730,7 @@ CRITICAL RULES:
 
     def hallucination_check(self, slug: str) -> Dict[str, Any]:
         """Automated hallucination detection using regex patterns.
-        
+
         Checks draft for claims that might not be sourced:
         - Statistics without source attribution
         - Quotes without attribution
@@ -2742,10 +2744,10 @@ CRITICAL RULES:
             return {"error": "No draft found."}
 
         draft = draft_path.read_text(encoding="utf-8")
-        
+
         # Skip rubric_self_assessment and similar metadata sections
         draft_main = re.split(r'\nrubric_self_assessment|\n---\nrubric_|\nvoice_check|\navoid_slop_pass|open_loops_flagged', draft)[0]
-        
+
         findings = []
 
         # Pattern 1: Numbers/statistics without nearby source name (scan main content only)
@@ -2866,13 +2868,13 @@ CRITICAL RULES:
     def issue_correction(self, slug: str, error_description: str,
                          correct_information: str, retract: bool = False) -> str:
         """Issue a correction or retraction for a published news item.
-        
+
         Args:
             slug: The run slug
             error_description: What was wrong
             correct_information: What the correct fact is
             retract: True if the entire story should be retracted
-            
+
         Returns:
             Status message
         """
@@ -3118,7 +3120,7 @@ TASK — Analyze:
 
 1. WHAT DROVE THE OKUNMA SAYISI?
    Quote the exact factual content readers valued.
-   
+
 2. WHAT DROVE ENGAGEMENT?
    What specific aspects drove likes/shares?
 
@@ -3282,7 +3284,7 @@ Return as markdown:
 
     def _scan_rss_signals(self) -> List[str]:
         """Fetch real RSS headlines from known NEWS_SOURCES + source-watchlist.md.
-        
+
         First tries directly from NEWS_SOURCES RSS feeds (v3.0+), then falls
         back to probing URLs from source-watchlist.md (legacy).
         """
@@ -3474,17 +3476,17 @@ Return as markdown:
         if not vf.exists():
             return "No voice profile set."
         content = vf.read_text(encoding="utf-8")
-        lines = [l for l in content.split('\n')
-                 if l.strip().startswith(('1.', '2.', '3.', '4.', '5.'))]
+        lines = [line for line in content.split('\n')
+                 if line.strip().startswith(('1.', '2.', '3.', '4.', '5.'))]
         return "\n".join(lines[:5]) if lines else content[:300]
 
     def enable_gbrain(self):
         """Enable GBrain integration for enhanced context retrieval.
-        
+
         GBrain integration provides semantic search over past learnings.
         When enabled, _query_gbrain uses GBrain MCP tools to find
         relevant proof and context for news briefs.
-        
+
         Note: GBrain MCP tools must be connected at runtime via Hermes
         config. This is a passive integration point — no MCP import needed here.
         """
@@ -3493,15 +3495,15 @@ Return as markdown:
 
     def _query_gbrain(self, query: str) -> Dict[str, str]:
         """Query GBrain for relevant context.
-        
+
         Integration point: when GBrain MCP tools (mcp_gbrain_query, etc.)
         are connected, this method can use them to find relevant pages.
-        
+
         Example implementation:
             from hermes_tools import mcp_gbrain_query
             result = mcp_gbrain_query(query=query, limit=3)
             return {item['slug']: item['content'] for item in result.get('results', [])}
-        
+
         Returns empty dict when GBrain is not connected.
         """
         if not self.gbrain_enabled:
@@ -3765,7 +3767,7 @@ async def tool_haber_kurator_manager(core: HaberKuratorCore, args: Dict[str, Any
 
         if action == "search_news":
             """Search for a specific news topic across multiple sources.
-            
+
             Uses Google News RSS search + existing clustering/verification.
             Supports Turkish and English queries with language/country detection.
             """

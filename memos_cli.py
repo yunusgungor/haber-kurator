@@ -6,6 +6,7 @@ import urllib.request
 import urllib.error
 import argparse
 
+
 def load_env():
     env_path = os.path.join(os.path.dirname(__file__), '.env')
     if os.path.exists(env_path):
@@ -15,6 +16,7 @@ def load_env():
                 if line and not line.startswith('#') and '=' in line:
                     key, val = line.split('=', 1)
                     os.environ[key.strip()] = val.strip().strip("'\"")
+
 
 def _get_url_token():
     load_env()
@@ -26,6 +28,7 @@ def _get_url_token():
             "Please create a .env file with MEMOS_TOKEN='your_token'"
         )
     return url, token
+
 
 def _api_request(method, endpoint, payload=None):
     """Generic Memos API request. Endpoint is the path after /api/v1/ (e.g. 'memos' or 'memos/{id}')."""
@@ -47,6 +50,7 @@ def _api_request(method, endpoint, payload=None):
     except Exception as e:
         raise RuntimeError(f"{method} {endpoint} → {str(e)[:200]}")
 
+
 def post_memo(content, tags=None, visibility="PUBLIC"):
     """Post a new memo to Memos."""
     _, _ = _get_url_token()
@@ -62,6 +66,7 @@ def post_memo(content, tags=None, visibility="PUBLIC"):
         raise
     except Exception as e:
         raise RuntimeError(f"Error publishing memo: {str(e)}") from e
+
 
 def update_memo(memo_id, content, tags=None, visibility="PUBLIC"):
     """Update an existing memo. memo_id is the UUID without 'memos/' prefix."""
@@ -81,6 +86,7 @@ def update_memo(memo_id, content, tags=None, visibility="PUBLIC"):
     except Exception as e:
         raise RuntimeError(f"Error updating memo: {str(e)}") from e
 
+
 def delete_memo(memo_id):
     """Delete a memo. memo_id is the UUID without 'memos/' prefix."""
     _, _ = _get_url_token()
@@ -92,6 +98,7 @@ def delete_memo(memo_id):
         raise
     except Exception as e:
         raise RuntimeError(f"Error deleting memo: {str(e)}") from e
+
 
 def main():
     parser = argparse.ArgumentParser(description="memos-cli - Publish to Memos platform natively")
@@ -124,6 +131,7 @@ def main():
     if args.action == "reply":
         content = f"(Reply to {args.parent_id})\n\n{content}"
     post_memo(content, args.tags, args.visibility)
+
 
 if __name__ == "__main__":
     main()
