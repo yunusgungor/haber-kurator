@@ -3,7 +3,7 @@
 ## Meta
 - **ID:** 2026-05-claim-counter-claim-and-tech-s-seedy-side-exposed
 - **Created:** 2026-05-16T23:46:05.788106
-- **Status:** cross_verified
+- **Status:** published
 - **Route:** VERIFIED
 - **Source Type:** multi-source
 - **Format:** Haber Bülteni
@@ -13,4 +13,4 @@
 - **Verified Sources:** 3
 
 state: cross_verified
-updated: 2026-05-17T00:23:02.215007
+updated: 2026-05-17T07:18:11.009001

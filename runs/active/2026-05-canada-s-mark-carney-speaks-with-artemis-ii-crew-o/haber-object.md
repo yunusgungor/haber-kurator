@@ -3,7 +3,7 @@
 ## Meta
 - **ID:** 2026-05-canada-s-mark-carney-speaks-with-artemis-ii-crew-o
 - **Created:** 2026-05-17T00:27:53.852692
-- **Status:** cross_verified
+- **Status:** published
 - **Route:** VERIFIED
 - **Source Type:** multi-source
 - **Format:** Haber Bülteni
@@ -11,3 +11,6 @@
 - **Title:** Canada's Mark Carney speaks with Artemis II crew on Earth
 - **Verification Level:** 2
 - **Verified Sources:** 2
+
+state: cross_verified
+updated: 2026-05-17T07:18:10.999809

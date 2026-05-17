@@ -3,7 +3,7 @@
 ## Meta
 - **ID:** 2026-05-us-planning-to-charge-ex-cuban-leader-ra-l-castro
 - **Created:** 2026-05-17T00:27:49.887057
-- **Status:** cross_verified
+- **Status:** published
 - **Route:** VERIFIED
 - **Source Type:** multi-source
 - **Format:** Haber Bülteni
@@ -11,3 +11,6 @@
 - **Title:** US planning to charge ex-Cuban leader Raúl Castro
 - **Verification Level:** 2
 - **Verified Sources:** 3
+
+state: cross_verified
+updated: 2026-05-17T07:18:11.013685

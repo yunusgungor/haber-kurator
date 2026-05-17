@@ -3,7 +3,7 @@
 ## Meta
 - **ID:** 2026-05-tens-of-thousands-join-rival-marches-in-london
 - **Created:** 2026-05-16T23:17:22.628621
-- **Status:** cross_verified
+- **Status:** published
 - **Route:** VERIFIED
 - **Source Type:** multi-source
 - **Format:** Haber Bülteni
@@ -13,4 +13,4 @@
 - **Verified Sources:** 5
 
 state: cross_verified
-updated: 2026-05-17T00:23:02.213439
+updated: 2026-05-17T07:18:11.007507

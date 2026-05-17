@@ -3,7 +3,7 @@
 ## Meta
 - **ID:** 2026-05-the-week-how-did-labour-get-here-and-where-do-the
 - **Created:** 2026-05-16T23:18:52.806741
-- **Status:** cross_verified
+- **Status:** published
 - **Route:** VERIFIED
 - **Source Type:** multi-source
 - **Format:** Haber Bülteni
@@ -13,4 +13,4 @@
 - **Verified Sources:** 7
 
 state: cross_verified
-updated: 2026-05-17T00:23:02.210211
+updated: 2026-05-17T07:18:11.002801

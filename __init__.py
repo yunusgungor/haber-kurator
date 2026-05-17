@@ -423,6 +423,7 @@ def register(ctx: Any) -> None:
             ctx.reply("⏳ Writer Agent başlatılıyor...")
             from .writer_agent import WriterAgent
             agent = WriterAgent(core)
+            # Enable Turkish content generation via LLM (falls back to template if unavailable)
             try:
                 from agent.auxiliary_client import async_call_llm
                 agent.set_llm(True)

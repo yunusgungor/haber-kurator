@@ -1,77 +1,139 @@
 """
 Writer Agent — Automatic News Article Generator for Memos Publishing
 =====================================================================
-Generates proper [Özet] - [Detaylar] - [Kaynak] formatted news articles
-from verified story clusters and publishes them to Memos.
+Generates proper Turkish [Özet] - [Detaylar] - [Kaynak] formatted news
+articles from verified story clusters and publishes them to Memos.
 """
 
 import os, json, urllib.request, re, time, logging
 from pathlib import Path
 from datetime import datetime
+from typing import Optional
 
-from .haber_kurator_core import HaberKuratorCore, VerificationLevel
+from haber_kurator_core import HaberKuratorCore, VerificationLevel
 
 
 class WriterAgent:
-    """Automated Writer Agent that generates news content from verified clusters.
+    """Automated Writer Agent that generates Turkish news content from verified clusters.
     
-    Uses Hermes Agent's built-in LLM for Turkish headline translation when available.
-    Falls back to original titles when running standalone.
+    Uses Hermes Agent's built-in LLM for Turkish content generation when available.
+    Falls back to template-based Turkish output (with English headlines) when LLM unavailable.
     """
 
     def __init__(self, core: HaberKuratorCore):
         self.core = core
         self._load_env()
-        self._llm = None  # Will be set if Hermes LLM is available
+        self._llm_available = False  # Set to True if Hermes LLM is reachable
 
-    def set_llm(self, llm):
-        """Set Hermes Agent LLM for translation support."""
-        self._llm = llm
+    def set_llm(self, available: bool = True):
+        """Mark that Hermes Agent LLM is available for Turkish content generation."""
+        self._llm_available = available
 
-    def _try_translate(self, text: str) -> str:
-        """Try to translate text to Turkish using Hermes LLM.
+    def _call_llm(self, system: str, user: str, task: str = "curator", timeout: int = 20) -> Optional[str]:
+        """Call the Hermes auxiliary LLM and return the text response.
 
-        Uses Hermes auxiliary LLM via a clean async wrapper.
-        Falls back to original text if LLM is unavailable.
-        Thread-safe: runs async LLM call in a dedicated thread with its own event loop.
+        Args:
+            system: System prompt for the LLM.
+            user: User message / prompt content.
+            task: Auxiliary task name (default: 'curator' — working task).
+            timeout: Max seconds per call.
+
+        Returns:
+            Response text, or None if LLM unavailable / call failed.
         """
-        if self._llm is None:
-            return text
-
+        if not self._llm_available:
+            return None
         try:
             import asyncio
+            import concurrent.futures
             from agent.auxiliary_client import async_call_llm
 
-            prompt = f"""Translate this news headline to Turkish. Return ONLY the Turkish translation, nothing else.
-
-Original: {text}
-Turkish:"""
-
-            async def do_translate():
+            async def do_call():
                 messages = [
-                    {"role": "system", "content": "You are a professional news translator. Translate English news headlines to Turkish. Return ONLY the translation."},
-                    {"role": "user", "content": prompt},
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
                 ]
-                raw = await async_call_llm(task="translate", messages=messages)
+                raw = await async_call_llm(task=task, messages=messages)
                 try:
-                    result = raw.choices[0].message.content
+                    text = raw.choices[0].message.content
                 except (AttributeError, IndexError):
-                    result = str(raw)
-                return result.strip().strip('"').strip("'")
+                    text = str(raw)
+                return text.strip().strip('"').strip("'").strip('»').strip('«')
 
-            # Thread-safe: always use a fresh thread + event loop
-            import concurrent.futures
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-                future = pool.submit(lambda: asyncio.run(do_translate()))
-                translated = future.result(timeout=15)
-
-            if translated and len(translated) > 5:
-                return translated
-
+                future = pool.submit(lambda: asyncio.run(do_call()))
+                result = future.result(timeout=timeout)
+            if result and len(result) > 3:
+                return result
         except Exception:
-            pass  # Fall back to original text
+            pass
+        return None
 
+    def _translate_headline(self, text: str) -> str:
+        """Translate a news headline to Turkish using the LLM.
+
+        Falls back to original text if LLM is unavailable.
+        """
+        if not self._llm_available:
+            return text
+
+        system = "You are a professional news translator. Translate the given English news headline to Turkish. Return ONLY the Turkish translation — no explanations, no quotes, no formatting."
+        user = f"Translate this news headline to Turkish:\n\nOriginal: {text}\nTurkish:"
+
+        translated = self._call_llm(system, user)
+        if translated:
+            return translated
         return text
+
+    def _generate_turkish_summary(self, cluster: dict) -> Optional[str]:
+        """Generate a full Turkish news article from a story cluster using LLM.
+
+        Creates a rich Turkish news summary in [Özet] - [Detaylar] - [Kaynak] format
+        with actual Turkish news prose, not just translated headlines.
+
+        Returns:
+            Turkish article string, or None if LLM unavailable.
+        """
+        title = cluster["story_title"]
+        items = cluster["items"]
+        sources = list(set(cluster["sources"]))
+        best_url = cluster.get("best_url", "")
+
+        # Build a compact source list for the prompt
+        src_lines = "\n".join(f"- {i.source_name}: {i.title}" for i in items[:5])
+        src_urls = "\n".join(f"- {i.source_name}: {i.url}" for i in items[:5])
+
+        system = (
+            "You are a professional Turkish news editor for a respected news agency. "
+            "Write a concise news article in Turkish based on the verified sources below.\n\n"
+            "FORMAT (use exactly these section headers):\n"
+            "[Özet]\n"
+            "Tek bir paragraf halinde haberin özeti. Haberin özünü, kim, ne, nerede, ne zaman sorularını yanıtla.\n\n"
+            "[Detaylar]\n"
+            "- Kısa maddeler halinde ek bilgiler (varsa rakamlar, bağlam, etkiler).\n"
+            "- Her madde en fazla 1 cümle.\n\n"
+            "[Kaynak]\n"
+            "- Kaynak Adı: URL\n\n"
+            "RULES:\n"
+            "- ALL text MUST be in Turkish.\n"
+            "- Be objective, factual, concise.\n"
+            "- Only use information present in the provided sources.\n"
+            "- Do NOT invent quotes or statistics.\n"
+            "- End with: #Haber #Gündem"
+        )
+
+        user = (
+            f"Write a Turkish news article about the following verified story:\n\n"
+            f"Story Title: {title}\n\n"
+            f"Sources ({len(sources)} total):\n{src_lines}\n\n"
+            f"Source URLs:\n{src_urls}\n\n"
+            f"Best URL: {best_url}"
+        )
+
+        article = self._call_llm(system, user, timeout=30)
+        if article and "[Özet]" in article:
+            return article
+        return None
 
     def _load_env(self):
         """Load Memos credentials from .env file."""
@@ -86,10 +148,16 @@ Turkish:"""
     def generate_news(self, cluster: dict) -> str:
         """Generate a complete news article from a verified story cluster.
         
-        Produces Turkish [Özet] - [Detaylar] - [Kaynak] formatted output with
-        proper source attribution. Only source names and URLs stay in original
-        language — all descriptive text is in Turkish.
+        FIRST: Tries to generate a full Turkish article via LLM (_generate_turkish_summary).
+        FALLBACK: Produces Turkish [Özet] - [Detaylar] - [Kaynak] formatted output with
+        translated title. Only source names and URLs stay in original language.
         """
+        # PRIORITY 1: Full LLM-based Turkish article (richer content, proper Turkish)
+        llm_article = self._generate_turkish_summary(cluster)
+        if llm_article:
+            return llm_article
+
+        # PRIORITY 2: Template-based fallback (Turkish metadata + translated headline)
         items = cluster["items"]
         sources = list(set(cluster["sources"]))
         tiers = cluster.get("tier_count", {})
@@ -97,7 +165,7 @@ Turkish:"""
         title = cluster["story_title"]
         
         # Translate title to Turkish if LLM available
-        tr_title = self._try_translate(title)
+        tr_title = self._translate_headline(title)
         
         primary_names = sorted(set(
             i.source_name for i in items if i.source_tier.value == 0

@@ -3,7 +3,7 @@
 ## Meta
 - **ID:** 2026-05-elon-musk-said-control-of-openai-should-go-to-his
 - **Created:** 2026-05-16T23:44:10.170459
-- **Status:** cross_verified
+- **Status:** published
 - **Route:** VERIFIED
 - **Source Type:** multi-source
 - **Format:** Haber Bülteni
@@ -13,4 +13,4 @@
 - **Verified Sources:** 6
 
 state: cross_verified
-updated: 2026-05-17T00:23:02.218368
+updated: 2026-05-17T07:18:11.012005

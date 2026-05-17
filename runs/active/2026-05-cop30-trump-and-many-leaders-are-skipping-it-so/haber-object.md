@@ -3,7 +3,7 @@
 ## Meta
 - **ID:** 2026-05-cop30-trump-and-many-leaders-are-skipping-it-so
 - **Created:** 2026-05-16T23:47:31.141736
-- **Status:** cross_verified
+- **Status:** published
 - **Route:** VERIFIED
 - **Source Type:** multi-source
 - **Format:** Haber Bülteni
@@ -13,4 +13,4 @@
 - **Verified Sources:** 4
 
 state: cross_verified
-updated: 2026-05-17T00:23:02.216746
+updated: 2026-05-17T07:18:11.010481

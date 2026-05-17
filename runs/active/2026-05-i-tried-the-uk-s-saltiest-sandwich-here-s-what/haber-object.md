@@ -3,7 +3,7 @@
 ## Meta
 - **ID:** 2026-05-i-tried-the-uk-s-saltiest-sandwich-here-s-what
 - **Created:** 2026-05-16T23:47:29.901383
-- **Status:** cross_verified
+- **Status:** published
 - **Route:** VERIFIED
 - **Source Type:** multi-source
 - **Format:** Haber Bülteni
@@ -13,4 +13,4 @@
 - **Verified Sources:** 4
 
 state: cross_verified
-updated: 2026-05-17T00:23:02.205147
+updated: 2026-05-17T07:18:10.979891
