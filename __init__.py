@@ -30,7 +30,7 @@ _RELOAD_TARGETS = ['haber_kurator_core', 'writer_agent', 'memos_cli']
 
 def _reload_modules():
     for _m in _RELOAD_TARGETS:
-        _full = f"plugins.haber_kurator.{_m}"
+        _full = f"hermes_plugins.haber_kurator.{_m}"
         if _full in __sys.modules:
             importlib.reload(__sys.modules[_full])
 

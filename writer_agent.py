@@ -15,7 +15,7 @@ from pathlib import Path
 from datetime import datetime
 from typing import Optional
 
-from haber_kurator_core import HaberKuratorCore, VerificationLevel
+from .haber_kurator_core import HaberKuratorCore, VerificationLevel
 
 
 class WriterAgent:
