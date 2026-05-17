@@ -313,8 +313,12 @@ class WriterAgent:
         
         return article
 
-    def post_to_memos(self, content: str, tags: str = "") -> bool:
-        """Post content to Memos platform via v1 API."""
+    def post_to_memos(self, content: str, tags: str = "") -> Optional[str]:
+        """Post content to Memos platform via v1 API.
+
+        Returns:
+            Memo ID string (e.g. 'abc123') on success, None on failure.
+        """
         _logger = logging.getLogger(__name__)
         token = os.environ.get("MEMOS_TOKEN", "")
         api_url = os.environ.get(
@@ -324,7 +328,7 @@ class WriterAgent:
 
         if not token:
             _logger.warning("❌ MEMOS_TOKEN not configured")
-            return False
+            return None
 
         # Append tags to content if provided (consistent with memos_cli.py)
         full_content = content
@@ -344,14 +348,29 @@ class WriterAgent:
         try:
             with urllib.request.urlopen(req, timeout=15) as resp:
                 result = json.loads(resp.read().decode("utf-8"))
-                memo_id = result.get("name", "?")
+                memo_id = result.get("name", "")
+                # Extract just the UUID part (e.g. 'memos/abc123' → 'abc123')
+                if '/' in memo_id:
+                    memo_id = memo_id.split('/')[-1]
                 _logger.info(f"  📤 Memos: {memo_id} ✅")
-                return True
+                return memo_id
         except urllib.error.HTTPError as e:
             _logger.warning(f"  📤 Memos: HTTP {e.code}")
-            return False
+            return None
         except Exception as e:
             _logger.warning(f"  📤 Memos: {str(e)[:60]}")
+            return None
+
+    def update_in_memos(self, memo_id: str, content: str, tags: str = "") -> bool:
+        """Update an existing memo via PATCH API."""
+        _logger = logging.getLogger(__name__)
+        try:
+            from memos_cli import update_memo
+            update_memo(memo_id, content, tags)
+            _logger.info(f"  📤 Memos UPDATE: {memo_id} ✅")
+            return True
+        except Exception as e:
+            _logger.warning(f"  📤 Memos UPDATE: {str(e)[:60]}")
             return False
 
     def auto_publish(self, max_articles: int = 5, category: str = None) -> dict:
@@ -481,14 +500,15 @@ source_attribution_check:
             # Step 5: Update state to published
             self.core.update_state(slug, "published")
             
-            # Step 6: Post to Memos
-            success = self.post_to_memos(article)
-            if success:
+            # Step 6: Post to Memos — returns memo_id if successful
+            memo_id = self.post_to_memos(article)
+            if memo_id:
                 results["published"] += 1
                 results["articles"].append({
                     "slug": slug,
                     "title": c["story_title"][:80],
                     "level": level.name,
+                    "memo_id": memo_id,  # Save for future corrections
                 })
             else:
                 results["failed"] += 1

@@ -1,7 +1,7 @@
 ---
 draft:
 [Özet]
-ABD ve Nijerya, ortak bir operasyonla üst düzey bir IŞİD (İslam Devleti) liderinin etkisiz hale getirildiğini duyurdu. Eski ABD Başkanı Donald Trump da yaptığı açıklamada operasyonun ABD güçleri ve Nijerya ordusu tarafından yürütüldüğünü ve bir IŞİD liderinin öldürüldüğünü doğruladı.
+|ABD ve Nijerya, ortak bir operasyonla üst düzey bir IŞİD (İslam Devleti) liderinin etkisiz hale getirildiğini duyurdu. ABD Başkanı Donald Trump da yaptığı açıklamada operasyonun ABD güçleri ve Nijerya ordusu tarafından yürütüldüğünü ve bir IŞİD liderinin öldürüldüğünü doğruladı.
 
 [Detaylar]
 - Operasyonun ABD ve Nijerya güçlerinin ortak katılımıyla gerçekleştiği belirtildi.
