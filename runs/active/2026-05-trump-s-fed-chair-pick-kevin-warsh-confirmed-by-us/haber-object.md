@@ -11,3 +11,6 @@
 - **Title:** Trump's Fed chair pick Kevin Warsh confirmed by US Senate
 - **Verification Level:** 2
 - **Verified Sources:** 3
+
+state: cross_verified
+updated: 2026-05-17T07:45:36.008113

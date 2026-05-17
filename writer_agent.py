@@ -29,8 +29,11 @@ class WriterAgent:
         """Mark that Hermes Agent LLM is available for Turkish content generation."""
         self._llm_available = available
 
-    def _call_llm(self, system: str, user: str, task: str = "curator", timeout: int = 20) -> Optional[str]:
+    def _call_llm(self, system: str, user: str, task: str = "curator", timeout: int = 60) -> Optional[str]:
         """Call the Hermes auxiliary LLM and return the text response.
+
+        Works in both async and sync contexts (agent tool calls / cron / standalone).
+        Detects running event loop and adapts accordingly.
 
         Args:
             system: System prompt for the LLM.
@@ -60,11 +63,21 @@ class WriterAgent:
                     text = str(raw)
                 return text.strip().strip('"').strip("'").strip('»').strip('«')
 
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-                future = pool.submit(lambda: asyncio.run(do_call()))
-                result = future.result(timeout=timeout)
+            # Check if we're already in an async context (Hermes agent)
+            try:
+                loop = asyncio.get_running_loop()
+                # Already in async context — run in separate thread
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                    future = pool.submit(lambda: asyncio.run(do_call()))
+                    result = future.result(timeout=timeout)
+            except RuntimeError:
+                # No running loop — fresh asyncio.run()
+                result = asyncio.run(do_call())
+
             if result and len(result) > 3:
                 return result
+        except concurrent.futures.TimeoutError:
+            pass  # LLM too slow — caller handles fallback
         except Exception:
             pass
         return None
@@ -130,7 +143,7 @@ class WriterAgent:
             f"Best URL: {best_url}"
         )
 
-        article = self._call_llm(system, user, timeout=30)
+        article = self._call_llm(system, user, timeout=60)
         if article and "[Özet]" in article:
             return article
         return None

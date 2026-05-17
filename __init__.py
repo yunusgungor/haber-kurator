@@ -14,6 +14,8 @@ Registers tools, hooks, slash commands, and CLI for the Haber Kuratör workflow.
 from pathlib import Path
 from typing import Any, Dict, Optional
 import logging
+import importlib
+import sys as __sys
 
 from .haber_kurator_core import HaberKuratorCore, tool_haber_kurator_manager, tool_haber_kurator_retriever
 from .cli import register_cli
@@ -417,6 +419,13 @@ def register(ctx: Any) -> None:
             return _t.report(extra)
 
         if sub == "auto-publish":
+            # Force module reload to pick up code changes (Python module cache)
+            _reload_mods = ['haber_kurator_core', 'writer_agent']
+            for _m in _reload_mods:
+                _full = f"plugins.haber_kurator.{_m}"
+                if _full in __sys.modules:
+                    importlib.reload(__sys.modules[_full])
+            
             limit = int(argv[1]) if len(argv) > 1 and argv[1].isdigit() else 5
             category = argv[2] if len(argv) > 2 and argv[2] in ("news", "technology", "business", "science") else None
             _t = _StageTracker("🤖 Writer Agent — Otomatik Yayın")

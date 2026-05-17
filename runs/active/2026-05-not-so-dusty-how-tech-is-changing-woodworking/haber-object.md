@@ -11,3 +11,6 @@
 - **Title:** Not so dusty: How tech is changing woodworking
 - **Verification Level:** 2
 - **Verified Sources:** 2
+
+state: cross_verified
+updated: 2026-05-17T07:45:36.036678
