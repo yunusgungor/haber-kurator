@@ -524,8 +524,7 @@ NEWS_SOURCES: Dict[str, NewsSource] = {
         category="news",
         tier=SourceTier.MAJOR,
         rss_feeds=[
-            "http://www.aa.com.tr/rss/ajansguncel.xml",
-            "https://www.aa.com.tr/rss/ajansguncel.xml",
+            "https://www.aa.com.tr/tr/rss/default?cat=guncel",
         ],
         language="tr",
         country="turkey",
@@ -548,12 +547,10 @@ NEWS_SOURCES: Dict[str, NewsSource] = {
         base_url="https://tr.euronews.com",
         category="news",
         tier=SourceTier.MAJOR,
-        rss_feeds=[
-            "https://tr.euronews.com/rss",
-        ],
+        rss_feeds=[],  # Genel RSS yayından kaldırıldı — Mayıs 2026
         language="tr",
         country="turkey",
-        notes="Çok dilli haber ağının Türkçe servisi. Tarafsız ve kapsamlı Avrupa ve dünya haberciliği.",
+        notes="Çok dilli haber ağının Türkçe servisi. ⚠️ RSS feed kullanılamıyor (Mayıs 2026).",
     ),
     "dw_turkce": NewsSource(
         name="Deutsche Welle Türkçe",
@@ -561,8 +558,8 @@ NEWS_SOURCES: Dict[str, NewsSource] = {
         category="news",
         tier=SourceTier.MAJOR,
         rss_feeds=[
-            "https://rss.dw.com/rdf/Turkish",
-            "https://www.dw.com/tr/rss",
+            "http://rss.dw.de/xml/rss-tur-pol-tur",
+            "http://rss.dw.de/xml/rss-tur-eco",
         ],
         language="tr",
         country="turkey",
@@ -585,48 +582,40 @@ NEWS_SOURCES: Dict[str, NewsSource] = {
         base_url="https://t24.com.tr",
         category="news",
         tier=SourceTier.SPECIALIZED,
-        rss_feeds=[
-            "https://t24.com.tr/rss",
-        ],
+        rss_feeds=[],  # RSS kapandı (Mayıs 2026) — çalışan feed bulunamadı
         language="tr",
         country="turkey",
-        notes="Bağımsız haber sitesi. Güçlü araştırmacı gazetecilik, geniş yazar kadrosu. Tarafsız yayın çizgisi.",
+        notes="Bağımsız haber sitesi. ⚠️ RSS feed kullanılamıyor (Mayıs 2026).",
     ),
     "medyascope": NewsSource(
         name="Medyascope",
         base_url="https://medyascope.tv",
         category="news",
         tier=SourceTier.SPECIALIZED,
-        rss_feeds=[
-            "https://medyascope.tv/feed/",
-        ],
+        rss_feeds=[],  # RSS erişimi engellendi (403) — Mayıs 2026
         language="tr",
         country="turkey",
-        notes="Bağımsız haber platformu. Canlı yayın, video haber, podcast. Tarafsız ve kapsamlı habercilik.",
+        notes="Bağımsız haber platformu. ⚠️ RSS feed erişime kapalı (403 Forbidden). Podcast feed mevcut.",
     ),
     "gazete_duvar": NewsSource(
         name="Gazete Duvar",
         base_url="https://www.gazeteduvar.com.tr",
         category="news",
         tier=SourceTier.SPECIALIZED,
-        rss_feeds=[
-            "https://www.gazeteduvar.com.tr/rss",
-        ],
+        rss_feeds=[],  # SİTE KAPANDI — 12 Mart 2025
         language="tr",
         country="turkey",
-        notes="Bağımsız internet gazetesi. Güncel haber, kültür-sanat, arkeoloji içerikleri. Tarafsız yayıncılık.",
+        notes="❌ Site kapanmıştır (12 Mart 2025). RSS feed kullanılamıyor.",
     ),
     "diken": NewsSource(
         name="Diken",
         base_url="https://www.diken.com.tr",
         category="news",
         tier=SourceTier.SPECIALIZED,
-        rss_feeds=[
-            "https://www.diken.com.tr/feed/",
-        ],
+        rss_feeds=[],  # RSS erişimi engellendi (403) — Mayıs 2026
         language="tr",
         country="turkey",
-        notes="Bağımsız haber sitesi. 'Yaramazlara biraz batar!' sloganıyla eleştirel ve bağımsız gazetecilik.",
+        notes="Bağımsız haber sitesi. ⚠️ RSS feed erişime kapalı (403 Forbidden).",
     ),
     "birgun": NewsSource(
         name="BirGün",
@@ -634,7 +623,7 @@ NEWS_SOURCES: Dict[str, NewsSource] = {
         category="news",
         tier=SourceTier.SPECIALIZED,
         rss_feeds=[
-            "https://www.birgun.net/rss",
+            "https://www.birgun.net/rss/home",
         ],
         language="tr",
         country="turkey",
@@ -1084,6 +1073,10 @@ class HaberKuratorCore:
         """Get all sources in a category (news, technology, business, science)."""
         return {k: v for k, v in self.sources.items() if v.category == category}
 
+    def get_sources_by_country(self, country: str) -> Dict[str, NewsSource]:
+        """Get all sources from a specific country (e.g. 'turkey', 'global')."""
+        return {k: v for k, v in self.sources.items() if v.country == country}
+
     def get_all_sources(self) -> Dict[str, Dict[str, Any]]:
         """Get all sources with their metadata."""
         return {k: v.to_dict() for k, v in self.sources.items()}
@@ -1112,25 +1105,33 @@ class HaberKuratorCore:
     # 2. NEWS FETCHING — Multi-Source RSS Aggregation
     # ══════════════════════════════════════════════════════════
 
-    def fetch_all_news(self, category: str = None) -> List[FetchedNewsItem]:
-        """Fetch latest news from ALL configured sources.
+    def fetch_all_news(self, category: str = None, country: str = None) -> List[FetchedNewsItem]:
+        """Fetch latest news from configured sources.
 
         Pulls from every source that has RSS feeds defined.
         Returns deduplicated list of news items.
 
         Args:
             category: Optional filter ('news', 'technology', 'business', 'science')
+            country: Optional filter by country code (e.g. 'turkey', 'global')
 
         Returns:
             List of FetchedNewsItem with source and URL.
         """
-        logger.info(f"fetch_all_news called (category={category})")
+        logger.info(f"fetch_all_news called (category={category}, country={country})")
         all_items: List[FetchedNewsItem] = []
         errors = []
 
         sources_to_fetch = self.sources
         if category:
             sources_to_fetch = self.get_sources_by_category(category)
+        if country:
+            by_country = self.get_sources_by_country(country)
+            # Intersect with existing filter if both category and country are set
+            if category:
+                sources_to_fetch = {k: v for k, v in sources_to_fetch.items() if k in by_country}
+            else:
+                sources_to_fetch = by_country
 
         for key, source in sources_to_fetch.items():
             if not source.rss_feeds:
@@ -2103,10 +2104,14 @@ class HaberKuratorCore:
 
         content = obj_path.read_text(encoding="utf-8")
         current_state = "captured"
-        # Support both "state:" and "Status:" field names
-        m = re.search(r'(?:state|Status|status):\s*(\w+)', content)
+        # Support all field formats:
+        #   "state: captured"               — bare lower
+        #   "Status: published"             — bare upper
+        #   "- **Status**: cross_verified"  — markdown bold, colon before close
+        #   "- **Status:** captured"        — markdown bold, colon after close
+        m = re.search(r'(?i)(- \*\*)?(?:status|state)\*{0,2}:\*{0,2}\s*(\w+)', content)
         if m:
-            current_state = m.group(1)
+            current_state = m.group(2)
 
         # Validate transition
         if not force and not self._valid_transition(current_state, new_state):
@@ -2114,12 +2119,13 @@ class HaberKuratorCore:
             return f"❌ Invalid transition: {current_state} → {new_state}. Allowed: {allowed}"
 
         # Update state in haber-object.md — handle all field formats:
-        # "state: published", "Status: published", "- **Status:** published"
-        state_field_pattern = r"(?i)(- \*\*)?(status|state)(\*\*)?:\s*\w+"
+        # "state: published", "Status: published", "- **Status**: cross_verified"
+        # Note: f-string "**Status:**" produces **Status**: (colon before close bold)
+        state_field_pattern = r"(?i)((- \*\*)?(?:status|state)\*{0,2}:\*{0,2}\s*)\w+"
         if re.search(state_field_pattern, content):
             new_content = re.sub(
                 state_field_pattern,
-                lambda m: f"{m.group(1) or ''}{m.group(2)}{m.group(3) or ''}: {new_state}",
+                lambda m: f"{m.group(1)}{new_state}",
                 content,
             )
         else:
@@ -2184,7 +2190,7 @@ class HaberKuratorCore:
         if not obj.exists():
             return "unknown"
         content = obj.read_text(encoding="utf-8")
-        m = re.search(r'state:\s*(\w+)', content)
+        m = re.search(r'(?i)(?:status|state)\*{0,2}:\*{0,2}\s*(\w+)', content)
         state = m.group(1) if m else "unknown"
         if state != "unknown":
             rs = RunState(slug=slug, state=state)
@@ -3749,7 +3755,8 @@ async def tool_haber_kurator_manager(core: HaberKuratorCore, args: Dict[str, Any
             return core.get_source_summary()
         if action == "fetch_news":
             category = args.get("category")
-            items = core.fetch_all_news(category)
+            country = args.get("country")
+            items = core.fetch_all_news(category, country)
             clusters = core.cluster_stories(items)
             return json.dumps({
                 "total_items": len(items),
@@ -3783,7 +3790,8 @@ async def tool_haber_kurator_manager(core: HaberKuratorCore, args: Dict[str, Any
         if action == "verify_news":
             """Fetch, cluster, and cross-verify all news from sources."""
             category = args.get("category")
-            items = core.fetch_all_news(category)
+            country = args.get("country")
+            items = core.fetch_all_news(category, country)
             clusters = core.cluster_stories(items)
             verified = []
             for cluster in clusters[:args.get("limit", 10)]:
@@ -3795,7 +3803,8 @@ async def tool_haber_kurator_manager(core: HaberKuratorCore, args: Dict[str, Any
             """Fetch, verify, and create runs for top news items."""
             category = args.get("category")
             human_review = args.get("human_review", True)
-            items = core.fetch_all_news(category)
+            country = args.get("country")
+            items = core.fetch_all_news(category, country)
             clusters = core.cluster_stories(items)
             results = []
             for cluster in clusters[:args.get("limit", 5)]:
@@ -3868,6 +3877,7 @@ async def tool_haber_kurator_manager(core: HaberKuratorCore, args: Dict[str, Any
                 results = agent.auto_publish(
                     max_articles=args.get("limit", 5),
                     category=args.get("category"),
+                    country=args.get("country"),
                 )
                 return json.dumps(results, indent=2, ensure_ascii=False)
             except Exception as e:

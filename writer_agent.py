@@ -384,12 +384,12 @@ class WriterAgent:
             _logger.warning(f"  📤 Memos UPDATE: {str(e)[:60]}")
             return False
 
-    def auto_publish(self, max_articles: int = 5, category: str = None) -> dict:
+    def auto_publish(self, max_articles: int = 5, category: str = None, country: str = None) -> dict:
         """Full pipeline: fetch → verify → generate → publish."""
         import logging
         _logger = logging.getLogger(__name__)
         _logger.info("📡 Haberler çekiliyor...")
-        items = self.core.fetch_all_news(category)
+        items = self.core.fetch_all_news(category, country)
         clusters = self.core.cluster_stories(items)
         _logger.info(f"✅ {len(items)} haber, {len(clusters)} küme\n")
 

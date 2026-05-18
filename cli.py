@@ -29,18 +29,24 @@ def register_cli(haber_parser, core: HaberKuratorCore):
     fetch_parser = subs.add_parser("fetch", help="📡 Fetch & cluster latest news from all sources")
     fetch_parser.add_argument("--category", choices=["news", "technology", "business", "science"],
                               help="Filter by category")
+    fetch_parser.add_argument("--country", type=str, default=None,
+                              help="Filter by country (e.g. 'turkey', 'global')")
     fetch_parser.add_argument("--limit", type=int, default=10,
                               help="Max top stories to show (default: 10)")
 
     verify_parser = subs.add_parser("verify", help="🔍 Cross-verify news stories across sources")
     verify_parser.add_argument("--category", choices=["news", "technology", "business", "science"],
                                help="Filter by category")
+    verify_parser.add_argument("--country", type=str, default=None,
+                               help="Filter by country (e.g. 'turkey', 'global')")
     verify_parser.add_argument("--limit", type=int, default=10,
                                help="Max stories to verify (default: 10)")
 
     publish_parser = subs.add_parser("publish", help="📰 Fetch, verify & create runs for top news")
     publish_parser.add_argument("--category", choices=["news", "technology", "business", "science"],
                                 help="Filter by category")
+    publish_parser.add_argument("--country", type=str, default=None,
+                                help="Filter by country (e.g. 'turkey', 'global')")
     publish_parser.add_argument("--limit", type=int, default=5,
                                 help="Max stories to publish (default: 5)")
     publish_parser.add_argument("--auto", action="store_true",
@@ -60,6 +66,8 @@ def register_cli(haber_parser, core: HaberKuratorCore):
     auto_pub_parser.add_argument("--limit", type=int, default=5, help="Max articles (default: 5)")
     auto_pub_parser.add_argument("--category", choices=["news", "technology", "business", "science"],
                                   help="Category filter")
+    auto_pub_parser.add_argument("--country", type=str, default=None,
+                                  help="Filter by country (e.g. 'turkey', 'global')")
 
     subs.add_parser("sources", help="📡 List all configured news sources by credibility tier")
 
@@ -97,9 +105,10 @@ def register_cli(haber_parser, core: HaberKuratorCore):
 
         elif cmd == "fetch":
             category = getattr(args, "category", None)
+            country = getattr(args, "country", None)
             limit = getattr(args, "limit", 10)
             with console.status("[bold cyan]📡 Fetching news from all sources...") as status:
-                items = core.fetch_all_news(category)
+                items = core.fetch_all_news(category, country)
                 clusters = core.cluster_stories(items)
                 limit = min(limit, len(clusters))
                 top = sorted(clusters, key=lambda c: c["source_count"], reverse=True)[:limit]
@@ -125,9 +134,10 @@ def register_cli(haber_parser, core: HaberKuratorCore):
 
         elif cmd == "verify":
             category = getattr(args, "category", None)
+            country = getattr(args, "country", None)
             limit = getattr(args, "limit", 10)
             with console.status("[bold cyan]🔍 Fetching & cross-verifying news...") as status:
-                items = core.fetch_all_news(category)
+                items = core.fetch_all_news(category, country)
                 clusters = core.cluster_stories(items)
                 limit = min(limit, len(clusters))
                 verifications = []
@@ -150,10 +160,11 @@ def register_cli(haber_parser, core: HaberKuratorCore):
 
         elif cmd == "publish":
             category = getattr(args, "category", None)
+            country = getattr(args, "country", None)
             limit = getattr(args, "limit", 5)
             auto = getattr(args, "auto", False)
             with console.status("[bold cyan]Fetching & verifying news...") as status:
-                items = core.fetch_all_news(category)
+                items = core.fetch_all_news(category, country)
                 clusters = core.cluster_stories(items)
                 results = []
                 for cluster in sorted(clusters, key=lambda c: c["source_count"], reverse=True)[:limit]:
@@ -200,6 +211,7 @@ def register_cli(haber_parser, core: HaberKuratorCore):
         elif cmd == "auto-publish":
             limit = getattr(args, "limit", 5)
             category = getattr(args, "category", None)
+            country = getattr(args, "country", None)
             from .writer_agent import WriterAgent
             agent = WriterAgent(core)
             # Enable Turkish content generation via LLM (falls back to template if unavailable)
@@ -209,7 +221,7 @@ def register_cli(haber_parser, core: HaberKuratorCore):
             except ImportError:
                 pass
             with console.status(f"[bold cyan]🤖 Writer Agent publishing {limit} news to Memos...[/bold cyan]"):
-                results = agent.auto_publish(max_articles=limit, category=category)
+                results = agent.auto_publish(max_articles=limit, category=category, country=country)
             console.print(f"\n[bold green]📊 Writer Agent — RAPOR[/bold green]")
             console.print(f"   Yayınlanan: {results['published']}")
             console.print(f"   Atlanan:    {results['skipped']}")

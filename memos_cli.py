@@ -31,9 +31,22 @@ def _get_url_token():
 
 
 def _api_request(method, endpoint, payload=None):
-    """Generic Memos API request. Endpoint is the path after /api/v1/ (e.g. 'memos' or 'memos/{id}')."""
+    """Generic Memos API request.
+    
+    Args:
+        method: HTTP method (POST, PATCH, DELETE)
+        endpoint: Path appended to MEMOS_API_URL. Pass "" to use MEMOS_API_URL as-is.
+                  MEMOS_API_URL already includes e.g. .../api/v1/memos, so:
+                  - post_memo() passes ""  → posts to MEMOS_API_URL directly
+                  - update_memo/delete_memo pass memo_id → appends /{memo_id}
+        payload: Optional JSON body
+    """
     base_url, token = _get_url_token()
-    full_url = f"{base_url.rstrip('/')}/{endpoint.lstrip('/')}"
+    base_url = base_url.rstrip('/')
+    if endpoint:
+        full_url = f"{base_url}/{endpoint.lstrip('/')}"
+    else:
+        full_url = base_url
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
@@ -58,7 +71,7 @@ def post_memo(content, tags=None, visibility="PUBLIC"):
         content = f"{content}\n\n{tags}"
     payload = {"content": content, "visibility": visibility}
     try:
-        result = _api_request("POST", "memos", payload)
+        result = _api_request("POST", "", payload)
         memo_name = result.get("name", "Unknown")
         print(f"Success! Memo published. ID: {memo_name}")
         return True
@@ -78,7 +91,7 @@ def update_memo(memo_id, content, tags=None, visibility="PUBLIC"):
     if visibility:
         payload["visibility"] = visibility
     try:
-        result = _api_request("PATCH", f"memos/{memo_id}", payload)
+        result = _api_request("PATCH", memo_id, payload)
         print(f"Success! Memo updated. ID: memos/{memo_id}")
         return True
     except RuntimeError:
@@ -91,7 +104,7 @@ def delete_memo(memo_id):
     """Delete a memo. memo_id is the UUID without 'memos/' prefix."""
     _, _ = _get_url_token()
     try:
-        result = _api_request("DELETE", f"memos/{memo_id}")
+        result = _api_request("DELETE", memo_id)
         print(f"Success! Memo deleted. ID: memos/{memo_id}")
         return True
     except RuntimeError:

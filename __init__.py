@@ -90,7 +90,7 @@ def register(ctx: Any) -> None:
                 "search_query": {"type": "string", "description": "Search query for news search"},
                 "max_results": {"type": "integer", "description": "Max search results for search_news (default: 20)"},
                 "language": {"type": "string", "description": "Language for search_news (default: 'tr')"},
-                "country": {"type": "string", "description": "Country for search_news (default: 'TR')"},
+                "country": {"type": "string", "description": "Country filter for fetch_news/verify_news/publish/auto_publish/search_news (e.g. 'turkey', 'global')"},
                 "include_archived": {"type": "boolean", "description": "Include archived runs", "default": True},
                 "category": {"type": "string", "enum": ["news", "technology", "business", "science"],
                              "description": "News category filter"},
@@ -440,6 +440,7 @@ def register(ctx: Any) -> None:
 
             limit = int(argv[1]) if len(argv) > 1 and argv[1].isdigit() else 5
             category = argv[2] if len(argv) > 2 and argv[2] in ("news", "technology", "business", "science") else None
+            country = argv[3] if len(argv) > 3 else None
             _t = _StageTracker("🤖 Writer Agent — Otomatik Yayın")
             ctx.reply("⏳ Writer Agent başlatılıyor...")
             from .writer_agent import WriterAgent
@@ -451,7 +452,7 @@ def register(ctx: Any) -> None:
             except ImportError:
                 pass
             _t.begin("Haberler işleniyor")
-            results = agent.auto_publish(max_articles=limit, category=category)
+            results = agent.auto_publish(max_articles=limit, category=category, country=country)
             _t.end()
             ctx.reply(f"✅ Otomatik yayın: ✅ {results['published']} | ⏭️ {results['skipped']} | ❌ {results['failed']}")
             extra = ["", f"📊 **Rapor:** ✅ {results['published']} yayın | ⏭️ {results['skipped']} atlandı | ❌ {results['failed']} başarısız", "", "### 🗞️ Yayınlanan Haberler", ""]
