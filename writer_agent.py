@@ -38,7 +38,7 @@ class WriterAgent:
         """Call the Hermes auxiliary LLM and return the text response.
 
         Works in both async and sync contexts (agent tool calls / cron / standalone).
-        Detects running event loop and adapts accordingly.
+        Always creates a fresh event loop to avoid asyncio conflicts.
 
         Args:
             system: System prompt for the LLM.
@@ -49,11 +49,9 @@ class WriterAgent:
         Returns:
             Response text, or None if LLM unavailable / call failed.
         """
-        if not self._llm_available:
-            return None
+        _logger = logging.getLogger(__name__)
         try:
             import asyncio
-            import concurrent.futures
             from agent.auxiliary_client import async_call_llm
 
             async def do_call():
@@ -68,23 +66,18 @@ class WriterAgent:
                     text = str(raw)
                 return text.strip().strip('"').strip("'").strip('»').strip('«')
 
-            # Check if we're already in an async context (Hermes agent)
+            # Always create a fresh event loop to avoid context conflicts
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
             try:
-                loop = asyncio.get_running_loop()
-                # Already in async context — run in separate thread
-                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-                    future = pool.submit(lambda: asyncio.run(do_call()))
-                    result = future.result(timeout=timeout)
-            except RuntimeError:
-                # No running loop — fresh asyncio.run()
-                result = asyncio.run(do_call())
+                result = loop.run_until_complete(do_call())
+            finally:
+                loop.close()
 
             if result and len(result) > 3:
                 return result
-        except concurrent.futures.TimeoutError:
-            pass  # LLM too slow — caller handles fallback
-        except Exception:
-            pass
+        except Exception as e:
+            _logger.warning("_call_llm error: %s: %s", type(e).__name__, str(e)[:200])
         return None
 
     def _translate_headline(self, text: str) -> str:

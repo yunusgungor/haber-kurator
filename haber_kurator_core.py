@@ -3868,12 +3868,27 @@ async def tool_haber_kurator_manager(core: HaberKuratorCore, args: Dict[str, Any
         # Writer Agent — Auto Publish
         if action == "auto_publish":
             try:
+                # Force module reload to pick up code changes (Python module cache)
+                import importlib as _hermes_il
+                import sys as _hermes_sys
+                for _mod in ['hermes_plugins.haber_kurator.writer_agent']:
+                    if _mod in _hermes_sys.modules:
+                        _hermes_il.reload(_hermes_sys.modules[_mod])
                 from .writer_agent import WriterAgent
                 agent = WriterAgent(core)
-                llm = kwargs.get("parent_agent")
-                llm_obj = llm.ctx.llm if llm and hasattr(llm, "ctx") else None
-                if llm_obj:
-                    agent.set_llm(llm_obj)
+                # Enable Turkish content generation via LLM
+                # (same approach as slash command handler — import-based detection)
+                try:
+                    from agent.auxiliary_client import async_call_llm
+                    agent.set_llm(True)
+                    _call_llm_logger = logging.getLogger(__name__)
+                    _call_llm_logger.info("auto_publish: LLM available, set_llm(True) called")
+                except ImportError as _ie:
+                    # Fallback: try parent_agent from kwargs (older path)
+                    llm_ctx = kwargs.get("parent_agent")
+                    llm_obj = llm_ctx.ctx.llm if llm_ctx and hasattr(llm_ctx, "ctx") else None
+                    if llm_obj:
+                        agent.set_llm(True)
                 results = agent.auto_publish(
                     max_articles=args.get("limit", 5),
                     category=args.get("category"),

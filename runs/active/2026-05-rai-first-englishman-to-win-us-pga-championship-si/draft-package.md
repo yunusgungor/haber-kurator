@@ -1,0 +1,30 @@
+---
+draft:
+[Özet] Teknoloji: Rai first Englishman to win US PGA Championship since 1919
+
+[Detaylar]
+- Bu haber, 2 kaynak tarafından doğrulandı.
+- Başlıca kaynaklar: BBC News, Fox News.
+- Haber, hem haber ajansı hem de büyük yayıncı teyidiyle doğrulandı.
+
+[Kaynak]
+- BBC News: https://www.bbc.com/sport/golf/articles/c86d4lv37vwo?at_medium=RSS&at_campaign=rss
+- Fox News: https://www.foxnews.com/sports/aaron-rai-emerges-pack-win-pga-championship-final-round-life-aronimink
+
+#Haber #Gündem #Teknoloji
+
+rubric_self_assessment:
+- Tarafsızlık: 2/2
+- Kaynak Gösterimi: 2/2
+- Kısalık ve Netlik: 2/2
+- Bilgi Yoğunluğu: 2/2
+- Clickbait Uzaklığı: 2/2
+- Format Yapısı: 2/2
+- TOTAL: 11/12
+
+avoid_slop_pass:
+- (clean)
+
+source_attribution_check:
+- Every claim sourced: yes
+- Sources approved: yes
