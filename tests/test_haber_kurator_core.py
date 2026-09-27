@@ -832,14 +832,14 @@ class TestWriterAgent:
         if "MEMOS_TOKEN" in agent.__dict__ or "MEMOS_TOKEN" in agent.__class__.__dict__:
             pass  # os.environ is checked directly in the method
         result = agent.post_to_memos("test content")
-        assert result is False, "Should return False when token is missing"
+        assert result is None, "Should return None when token is missing"
 
     def test_post_to_memos_missing_token_restores_env(self, agent, monkeypatch):
         """Verify post_to_memos doesn't crash when called without token in various states."""
         monkeypatch.delenv("MEMOS_TOKEN", raising=False)
         monkeypatch.delenv("MEMOS_API_URL", raising=False)
         result = agent.post_to_memos("Test article content with #tags")
-        assert result is False
+        assert result is None
 
 
 # ============================================================

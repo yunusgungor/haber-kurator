@@ -88,15 +88,14 @@
 
 | # | Kaynak | Kategori | RSS | Özellik |
 |---|--------|----------|-----|---------|
-| 28 | **T24** | Genel Haber | ✅ `t24.com.tr/rss` | Bağımsız haber sitesi. Araştırmacı gazetecilik. |
-| 29 | **Medyascope** | Genel Haber | ✅ `medyascope.tv/feed/` | Bağımsız haber platformu. Canlı yayın ve podcast. |
-| 30 | **Gazete Duvar** | Genel Haber | ✅ `gazeteduvar.com.tr/rss` | Bağımsız internet gazetesi. Kültür-sanat. |
-| 31 | **Diken** | Genel Haber | ✅ `diken.com.tr/feed/` | Bağımsız, eleştirel haber sitesi. |
-| 32 | **BirGün** | Genel Haber | ✅ `birgun.net/rss` | Bağımsız sol gazete. Hak haberciliği. |
-| 33 | **Sözcü** | Genel Haber | ✅ `sozcu.com.tr/feeds-haberler` | Türkiye'nin en çok okunan gazetelerinden. |
-| 34 | **Cumhuriyet** | Genel Haber | ✅ `cumhuriyet.com.tr/rss/son_dakika.xml` | 1924'ten beri. Köklü gazetecilik geleneği. |
-| 35 | **Hürriyet** | Genel Haber | ✅ `rss.hurriyet.com.tr/` | Geniş muhabir ağı. Güncel haber ve analiz. |
-| 36 | **Webrazzi** | Teknoloji | ✅ `webrazzi.com/feed/` | Türkiye teknoloji haberciliği. Girişim odaklı. |
+| 28 | **T24** | Genel Haber | ❌ RSS kapandı (Mayıs 2026) | Bağımsız haber sitesi. |
+| 29 | **Medyascope** | Genel Haber | ❌ RSS 403 (Mayıs 2026) | Bağımsız haber platformu. |
+| 30 | **Diken** | Genel Haber | ❌ RSS 403 (Mayıs 2026) | Bağımsız, eleştirel haber sitesi. |
+| 31 | **BirGün** | Genel Haber | ✅ `birgun.net/rss` | Bağımsız sol gazete. Hak haberciliği. |
+| 32 | **Sözcü** | Genel Haber | ✅ `sozcu.com.tr/feeds-haberler` | Türkiye'nin en çok okunan gazetelerinden. |
+| 33 | **Cumhuriyet** | Genel Haber | ✅ `cumhuriyet.com.tr/rss/son_dakika.xml` | 1924'ten beri. Köklü gazetecilik geleneği. |
+| 34 | **Hürriyet** | Genel Haber | ✅ `rss.hurriyet.com.tr/` | Geniş muhabir ağı. Güncel haber ve analiz. |
+| 35 | **Webrazzi** | Teknoloji | ✅ `webrazzi.com/feed/` | Türkiye teknoloji haberciliği. Girişim odaklı. |
 
 ### Çapraz Doğrulama Kuralları (Türkiye Haberleri İçin)
 

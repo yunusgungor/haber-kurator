@@ -42,11 +42,8 @@ VERSION = "3.1.0"
 CONFIG = {
     "version": "3.1.0",
     "min_verification_level": 1,  # Minimum level to publish (0-3)
-    "cross_verify_sources": 2,    # Minimum sources that must agree
-    "cache_enabled": True,
     "rss_timeout": 5,             # Seconds per RSS fetch
     "rss_delay": 0.3,             # Delay (s) between RSS fetches to avoid rate limiting
-    "max_sources_per_story": 5,   # Max sources to track per story
 }
 
 # ══════════════════════════════════════════════════════════════
@@ -597,16 +594,6 @@ NEWS_SOURCES: Dict[str, NewsSource] = {
         country="turkey",
         notes="Bağımsız haber platformu. ⚠️ RSS feed erişime kapalı (403 Forbidden). Podcast feed mevcut.",
     ),
-    "gazete_duvar": NewsSource(
-        name="Gazete Duvar",
-        base_url="https://www.gazeteduvar.com.tr",
-        category="news",
-        tier=SourceTier.SPECIALIZED,
-        rss_feeds=[],  # SİTE KAPANDI — 12 Mart 2025
-        language="tr",
-        country="turkey",
-        notes="❌ Site kapanmıştır (12 Mart 2025). RSS feed kullanılamıyor.",
-    ),
     "diken": NewsSource(
         name="Diken",
         base_url="https://www.diken.com.tr",
@@ -679,10 +666,6 @@ NEWS_SOURCES: Dict[str, NewsSource] = {
         notes="Türkiye'nin önde gelen teknoloji haberciliği platformu. Girişim, yatırım ve dijital dönüşüm odaklı.",
     ),
 }
-
-# RSS endpoint probe patterns — many sites use one of these
-RSS_PROBES = ["/feed", "/rss", "/rss.xml", "/feed.xml", "/atom.xml", "/news/rss", "/rss/feed"]
-
 
 # ══════════════════════════════════════════════════════════════
 # STATE MACHINE — 8 States (News Only)
@@ -915,8 +898,6 @@ class HaberKuratorCore:
 
         # Known sources directory
         self.sources = NEWS_SOURCES.copy()
-
-        self.gbrain_enabled = False
 
         self._init_stores_dirs()
         self._migrate_old_state()
@@ -3087,7 +3068,11 @@ Return EXACTLY valid JSON:
 
     async def run_postmortem(self, slug: str, metrics: Dict[str, Any] = None,
                              llm: Any = None) -> Dict[str, Any]:
-        """LLM-based postmortem with exact-line analysis (preserved)."""
+        """LLM-based postmortem analysis for a published run.
+
+        Writes feedback.md but stays in current lifecycle state — does NOT
+        attempt invalid state transitions (postmortem is an advisory pass).
+        """
         run_path = self.active_runs / slug
         if not run_path.exists():
             return {"error": f"Run {slug} not found."}
@@ -3105,16 +3090,10 @@ Return EXACTLY valid JSON:
                 "okunma": 0, "replies": 0,
             }
 
-        current_state = self.get_state(slug)
-        phase = "24h" if current_state == "feedback_24h" else "72h"
-
         prompt = f"""You are running a POSTMORTEM on a published news article.
-
-Phase: {phase} hour feedback.
 
 CONTEXT:
 POST SLUG: {slug}
-PHASE: {phase}
 METRICS: {json.dumps(metrics, indent=2)}
 
 PUBLISHED DRAFT:
@@ -3190,10 +3169,9 @@ Return as markdown:
                 metrics.get("okunma", 0) / max(metrics.get("impressions", 1), 1) * 100
             )
 
-            feedback_content = f"""{existing}# {phase}h Feedback — {slug}
+            feedback_content = f"""{existing}# Postmortem — {slug}
 
 **Date:** {datetime.now().isoformat()}
-**Phase:** {phase}
 **Metrics:** {json.dumps(metrics, indent=2)}
 **Okunma Rate:** {okunma_rate:.1f}%
 
@@ -3202,19 +3180,11 @@ Return as markdown:
 """
             feedback_path.write_text(feedback_content, encoding="utf-8")
 
-            new_state = "feedback_72h" if phase == "24h" else "learned"
-            self.update_state(slug, new_state)
-
-            # Check if correction needed based on feedback
-            self.check_correction_needed(slug)
-
             return {
                 "slug": slug,
-                "phase": phase,
                 "metrics": metrics,
                 "okunma_rate": okunma_rate,
                 "analysis": text,
-                "new_state": new_state,
             }
 
         except Exception as e:
@@ -3289,15 +3259,11 @@ Return as markdown:
         return signals[:5]
 
     def _scan_rss_signals(self) -> List[str]:
-        """Fetch real RSS headlines from known NEWS_SOURCES + source-watchlist.md.
+        """Fetch RSS headlines from NEWS_SOURCES via shared _fetch_rss_feed.
 
-        First tries directly from NEWS_SOURCES RSS feeds (v3.0+), then falls
-        back to probing URLs from source-watchlist.md (legacy).
+        Uses the same RSS parser as fetch_all_news to avoid code duplication.
         """
         signals = []
-        ATOM_NS = "{http://www.w3.org/2005/Atom}"
-
-        # Try known NEWS_SOURCES RSS feeds first (v3.0+)
         for key, src in self.sources.items():
             if len(signals) >= 5:
                 break
@@ -3305,69 +3271,11 @@ Return as markdown:
                 if len(signals) >= 5:
                     break
                 try:
-                    req = urllib.request.Request(
-                        feed_url,
-                        headers={"User-Agent": f"Haber-Kuratör/{VERSION} RSS Reader"},
-                    )
-                    with urllib.request.urlopen(req, timeout=CONFIG["rss_timeout"]) as resp:
-                        xml_data = resp.read()
-                    root_el = ET.fromstring(xml_data)
-                    for item in root_el.findall(".//item")[:1]:
-                        title = item.findtext("title", "").strip()
-                        if title:
-                            signals.append(f"[{src.name}] {title[:110]}")
-                    if not signals or signals[-1].startswith(f"[{src.name}]"):
-                        for entry in root_el.findall(f".//{ATOM_NS}entry")[:1]:
-                            t_el = entry.find(f"{ATOM_NS}title")
-                            if t_el is not None and t_el.text:
-                                signals.append(f"[{src.name}] {t_el.text.strip()[:110]}")
+                    items = self._fetch_rss_feed(feed_url, src)
+                    for item in items[:1]:
+                        signals.append(f"[{src.name}] {item.title[:110]}")
                 except Exception:
                     continue
-
-        # Fallback: probe source-watchlist.md URLs (legacy)
-        if not signals:
-            wl = self.strategy / "source-watchlist.md"
-            if wl.exists():
-                content = wl.read_text(encoding="utf-8")
-                raw_urls = re.findall(r'https?://[^\s\)\()]+', content)
-                seen: set = set()
-                base_urls = []
-                for url in raw_urls:
-                    base = "/".join(url.split("/")[:3])
-                    if base not in seen:
-                        seen.add(base)
-                        base_urls.append(base)
-
-                for base in base_urls[:6]:
-                    if len(signals) >= 5:
-                        break
-                    for suffix in RSS_PROBES:
-                        try:
-                            req = urllib.request.Request(
-                                base + suffix,
-                                headers={"User-Agent": f"Haber-Kuratör/{VERSION} RSS Reader"},
-                            )
-                            with urllib.request.urlopen(req, timeout=CONFIG["rss_timeout"]) as resp:
-                                xml_data = resp.read()
-                            root_el = ET.fromstring(xml_data)
-                            fetched = False
-                            for item in root_el.findall(".//item")[:2]:
-                                title = item.findtext("title", "").strip()
-                                if title:
-                                    domain = base.replace("https://", "").replace("http://", "").split("/")[0]
-                                    signals.append(f"[{domain}] {title[:110]}")
-                                    fetched = True
-                            if not fetched:
-                                for entry in root_el.findall(f".//{ATOM_NS}entry")[:2]:
-                                    t_el = entry.find(f"{ATOM_NS}title")
-                                    if t_el is not None and t_el.text:
-                                        domain = base.replace("https://", "").replace("http://", "").split("/")[0]
-                                        signals.append(f"[{domain}] {t_el.text.strip()[:110]}")
-                                        fetched = True
-                            if fetched:
-                                break
-                        except Exception:
-                            continue
 
         if not signals:
             signals = [
@@ -3376,45 +3284,6 @@ Return as markdown:
             ]
 
         return signals[:5]
-
-    # --- Learning Extraction ---
-
-    def _save_learnings(self, slug: str, analysis: Dict[str, Any],
-                         metrics: Dict[str, Any]):
-        okunma_rate = analysis.get("okunma_rate", 0)
-        if okunma_rate > 5:
-            proof_name = f"{slug}-{datetime.now().strftime('%Y%m')}"
-            proof_path = self.stores / "proof" / f"{proof_name}.md"
-            proof_content = f"""# Proof from {slug}
-
-**Metrics:**
-- Impressions: {metrics.get('impressions', 0)}
-- Okunmalar: {metrics.get('okunma', 0)}
-- Okunma Rate: {okunma_rate:.1f}%
-
-**What Worked:**
-{analysis.get('pattern_to_capture', 'N/A')}
-
-**Date: {datetime.now().isoformat()}**
-"""
-            proof_path.write_text(proof_content, encoding="utf-8")
-
-        feedback_dir = self.stores / "feedback"
-        feedback_dir.mkdir(parents=True, exist_ok=True)
-        feedback_name = f"{slug}-{datetime.now().strftime('%Y%m%d')}.md"
-        feedback_path = feedback_dir / feedback_name
-        summary = f"""# Feedback: {slug}
-
-**Metrics:**
-- Impressions: {metrics.get('impressions', 0)}
-- Okunmalar: {metrics.get('okunma', 0)}
-- Likes: {metrics.get('likes', 0)}
-- Paylaşımlar: {metrics.get('paylasimlar', 0)}
-
-**Performance:** {'Good' if okunma_rate > 5 else 'Needs improvement'}
-**Date: {datetime.now().isoformat()}**
-"""
-        feedback_path.write_text(summary, encoding="utf-8")
 
     def get_learnings_for_brief(self, topic: str = None) -> str:
         learnings = []
@@ -3436,10 +3305,6 @@ Return as markdown:
     # --- Context Retrieval ---
 
     def _get_relevant_proof(self, idea: str) -> str:
-        if self.gbrain_enabled:
-            gbrain_result = self._query_gbrain(idea)
-            if gbrain_result:
-                return "\n\n".join([f"## {k}\n{v}" for k, v in gbrain_result.items()])
         proof_dir = self.stores / "proof"
         if not proof_dir.exists():
             return "No proof directory found."
@@ -3487,33 +3352,18 @@ Return as markdown:
         return "\n".join(lines[:5]) if lines else content[:300]
 
     def enable_gbrain(self):
-        """Enable GBrain integration for enhanced context retrieval.
+        """Enable GBrain integration (stub).
 
-        GBrain integration provides semantic search over past learnings.
-        When enabled, _query_gbrain uses GBrain MCP tools to find
-        relevant proof and context for news briefs.
-
-        Note: GBrain MCP tools must be connected at runtime via Hermes
-        config. This is a passive integration point — no MCP import needed here.
+        GBrain integration placeholder for enhanced context retrieval.
         """
-        self.gbrain_enabled = True
-        logger.info("GBrain integration enabled for Haber Kuratör")
+        logger.info("GBrain integration enabled (stub)")
 
     def _query_gbrain(self, query: str) -> Dict[str, str]:
-        """Query GBrain for relevant context.
+        """Query GBrain for relevant context (stub).
 
-        Integration point: when GBrain MCP tools (mcp_gbrain_query, etc.)
-        are connected, this method can use them to find relevant pages.
-
-        Example implementation:
-            from hermes_tools import mcp_gbrain_query
-            result = mcp_gbrain_query(query=query, limit=3)
-            return {item['slug']: item['content'] for item in result.get('results', [])}
-
-        Returns empty dict when GBrain is not connected.
+        Integration point: when GBrain MCP tools are connected,
+        this method can use them. Returns empty dict by default.
         """
-        if not self.gbrain_enabled:
-            return {}
         logger.debug(f"GBrain query (stub): {query[:80]}")
         return {}
 
