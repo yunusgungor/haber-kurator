@@ -19,7 +19,7 @@ from haber_kurator_core import (
     FULL_SLOP_TIER1, FULL_SLOP_TIER2, FULL_SLOP_TIER3, FULL_SLOP_BONUS,
     RunState, SlopResult, STATE_TRANSITIONS, CONFIG,
     FetchedNewsItem, SourceTier, VerificationLevel,
-    CrossVerificationResult,
+    CrossVerificationResult, ROUTE_VERIFIED, ROUTE_HIGH_SLOP, ROUTE_ESCALATED,
 )
 import pytest
 
@@ -282,6 +282,147 @@ class TestStateMachine:
         actions = core.get_next_actions(slug)
         assert len(actions) > 0
         assert isinstance(actions, list)
+
+    # ══════════════════════════════════════════════════════════
+    # STATE MACHINE — Expanded Tests (Bulgu 7 / E-007)
+    # ══════════════════════════════════════════════════════════
+
+    def test_state_transition_happy_path(self, core):
+        """Full lifecycle: cross_verified → published → archived"""
+        slug = self._create_test_run(core)
+        assert core.get_state(slug) == "cross_verified"
+        path = ["published", "archived"]
+        for state in path:
+            r = core.update_state(slug, state)
+            assert "✅" in r, f"Transition to {state} failed: {r}"
+        assert core.get_state(slug) == "archived"
+
+    def test_state_invalid_transition_denied(self, core):
+        """cross_verified → fact_checking (going backward) should be denied"""
+        slug = self._create_test_run(core)
+        assert core.get_state(slug) == "cross_verified"
+        r = core.update_state(slug, "fact_checking")
+        assert "❌" in r, f"Invalid transition should be denied: {r}"
+
+    def test_state_force_bypasses_validation(self, core):
+        """force=True should allow any transition"""
+        slug = self._create_test_run(core)
+        r = core.update_state(slug, "captured", force=True)
+        assert "✅" in r, f"Force transition should succeed: {r}"
+
+    def test_state_back_to_captured(self, core):
+        """cross_verified → captured (rework from verified back to queue)"""
+        slug = self._create_test_run(core)
+        r = core.update_state(slug, "captured")
+        assert "✅" in r
+        assert core.get_state(slug) == "captured"
+
+    def test_state_published_to_corrected(self, core):
+        """published → corrected (direct correction)"""
+        slug = self._create_test_run(core)
+        core.update_state(slug, "published")
+        r = core.update_state(slug, "corrected")
+        assert "✅" in r, f"published→corrected should work: {r}"
+        assert core.get_state(slug) == "corrected"
+
+    def test_state_corrected_to_archived(self, core):
+        """corrected → archived"""
+        slug = self._create_test_run(core)
+        core.update_state(slug, "published")
+        core.update_state(slug, "corrected")
+        r = core.update_state(slug, "archived")
+        assert "✅" in r, f"corrected→archived should work: {r}"
+
+    def test_state_cross_verified_to_correction_needed(self, core):
+        """cross_verified → correction_needed (pre-publish error catch)"""
+        slug = self._create_test_run(core)
+        r = core.update_state(slug, "correction_needed")
+        assert "✅" in r, f"cross_verified→correction_needed should work: {r}"
+
+    def test_state_fact_checking_to_correction_needed(self, core):
+        """fact_checking → correction_needed — start from captured"""
+        slug = self._create_test_run(core)
+        core.update_state(slug, "captured", force=True)
+        core.update_state(slug, "fact_checking")
+        r = core.update_state(slug, "correction_needed")
+        assert "✅" in r, f"fact_checking→correction_needed should work: {r}"
+
+    def test_state_archived_is_terminal(self, core):
+        """archived → any state should be denied"""
+        slug = self._create_test_run(core)
+        core.update_state(slug, "published")
+        core.update_state(slug, "archived")
+        for target in ("captured", "fact_checking", "published"):
+            r = core.update_state(slug, target)
+            assert "❌" in r, f"archived→{target} should be denied: {r}"
+
+    def test_state_valid_transition_fallback_deny(self, core):
+        """_valid_transition should return False for unknown source states"""
+        assert not core._valid_transition("nonexistent_state", "captured")
+        assert not core._valid_transition("unknown", "archived")
+
+    def test_state_route_default_verified(self, core):
+        """New run should have VERIFIED route"""
+        slug = self._create_test_run(core)
+        assert core.get_route(slug) == "VERIFIED"
+
+    def test_state_route_preserved(self, core):
+        """Route should persist through state changes"""
+        slug = self._create_test_run(core)
+        core.update_state(slug, "published")
+        assert core.get_route(slug) == "VERIFIED"
+
+    def test_state_route_custom(self, core):
+        """Route parameter should set non-default route on valid transition"""
+        slug = self._create_test_run(core)
+        r = core.update_state(slug, "published", route="HIGH_SLOP")
+        assert "✅" in r, str(r)
+        assert core.get_route(slug) == "HIGH_SLOP"
+
+    def test_state_get_route_unknown_slug(self, core):
+        """get_route for unknown slug should return VERIFIED"""
+        assert core.get_route("nonexistent") == "VERIFIED"
+
+    def test_state_correction_full_cycle(self, core):
+        """published → correction_needed → corrected → archived"""
+        slug = self._create_test_run(core)
+        core.update_state(slug, "published")
+        core.update_state(slug, "correction_needed")
+        assert core.get_state(slug) == "correction_needed"
+        core.update_state(slug, "corrected")
+        assert core.get_state(slug) == "corrected"
+        core.update_state(slug, "archived")
+        assert core.get_state(slug) == "archived"
+
+    def test_state_retraction_flow(self, core):
+        """published → correction_needed → retracted → archived"""
+        slug = self._create_test_run(core)
+        core.update_state(slug, "published")
+        core.update_state(slug, "correction_needed")
+        core.update_state(slug, "retracted")
+        assert core.get_state(slug) == "retracted"
+        core.update_state(slug, "archived")
+        assert core.get_state(slug) == "archived"
+
+    def _create_test_run(self, core) -> str:
+        from haber_kurator_core import FetchedNewsItem, SourceTier
+        cluster = {
+            "story_title": "Test News State Machine",
+            "items": [
+                FetchedNewsItem(title="Test A", url="https://r.com", source_name="Reuters",
+                    source_tier=SourceTier.PRIMARY, summary="Test", category="news"),
+                FetchedNewsItem(title="Test B", url="https://ap.com", source_name="Associated Press (AP)",
+                    source_tier=SourceTier.PRIMARY, summary="Test", category="news"),
+            ],
+            "sources": ["Reuters", "Associated Press (AP)"],
+            "source_tiers": [0, 0],
+            "source_count": 2,
+            "tier_count": {"primary": 2, "major": 0, "specialized": 0},
+            "categories": ["news"],
+            "best_url": "https://r.com",
+        }
+        r = core.create_news_run(cluster)
+        return r["slug"]
 
 
 # ============================================================

@@ -674,16 +674,18 @@ STATE_LIFECYCLE = [
 
 STATE_TRANSITIONS = {
     "captured":           ["fact_checking"],
-    "fact_checking":      ["cross_verified", "captured"],
-    "cross_verified":     ["captured", "published"],
-    "published":          ["correction_needed", "archived"],
+    "fact_checking":      ["cross_verified", "captured", "correction_needed"],
+    "cross_verified":     ["captured", "published", "correction_needed"],
+    "published":          ["correction_needed", "corrected", "archived"],
     "correction_needed":  ["corrected", "retracted"],
-    "corrected":          ["published"],
+    "corrected":          ["published", "archived"],
     "retracted":          ["archived"],
     "archived":           [],
 }
 
 ROUTE_VERIFIED = "VERIFIED"
+ROUTE_HIGH_SLOP = "HIGH_SLOP"
+ROUTE_ESCALATED = "ESCALATED"
 
 # Self-assessment fields for Writer Agent output
 WRITER_FIELDS = [
@@ -2120,12 +2122,19 @@ class HaberKuratorCore:
 
     def _valid_transition(self, from_state: str, to_state: str) -> bool:
         if from_state not in STATE_TRANSITIONS:
-            return to_state in STATE_LIFECYCLE
+            return False  # Unknown source state → deny all transitions
         return to_state in STATE_TRANSITIONS[from_state]
 
     def update_state(self, slug: str, new_state: str,
-                     force: bool = False) -> str:
-        """Update state with 8-state lifecycle validation."""
+                     force: bool = False, route: str = "VERIFIED") -> str:
+        """Update state with 8-state lifecycle validation.
+
+        Args:
+            slug: Run slug
+            new_state: Target state from STATE_LIFECYCLE
+            force: Skip transition validation (used by sync_state for FS recovery)
+            route: Route classification — VERIFIED, HIGH_SLOP, or ESCALATED
+        """
         logger.info("update_state: slug=%s, new_state=%s, force=%s", slug, new_state, force)
 
         if new_state not in STATE_LIFECYCLE:
@@ -2143,6 +2152,7 @@ class HaberKuratorCore:
             idea = "news-item"
             obj_path.write_text(
                 f"title: {idea}\nstate: {new_state}\n"
+                f"route: {route}\n"
                 f"created: {datetime.now().isoformat()}\n"
                 f"updated: {datetime.now().isoformat()}",
                 encoding="utf-8",
@@ -2151,6 +2161,7 @@ class HaberKuratorCore:
                 slug=slug,
                 title=idea,
                 state=new_state,
+                route=route,
                 updated=datetime.now().isoformat(),
             )
             self._save_state_cache()
@@ -2191,15 +2202,14 @@ class HaberKuratorCore:
         else:
             new_content = f"{new_content}\nupdated: {ts}"
 
-        obj_path.write_text(new_content, encoding="utf-8")
-
-        # Update cache
+        # Update cache entry first so next_route is available for the file write
         existing = self._state_cache.get(slug, RunState(slug=slug))
+        next_route = route if existing.route == "VERIFIED" else existing.route
         self._state_cache[slug] = RunState(
             slug=slug,
             title=existing.title,
             state=new_state,
-            route=existing.route,
+            route=next_route,
             created=existing.created,
             updated=ts,
             source_type=existing.source_type,
@@ -2207,11 +2217,25 @@ class HaberKuratorCore:
         )
         self._save_state_cache()
 
+        # Write route to haber-object.md
+        route_field_pattern = r"(?i)route:\s*\w+"
+        if re.search(route_field_pattern, new_content):
+            new_content = re.sub(route_field_pattern, f"route: {next_route}", new_content)
+        else:
+            new_content = f"{new_content}\nroute: {next_route}"
+
+        obj_path.write_text(new_content, encoding="utf-8")
+
         logger.debug("update_state: %s: %s → %s", slug, current_state, new_state)
         return f"✅ {slug}: {current_state} → {new_state}"
 
     def sync_state(self, slug: str) -> str:
-        """Scan filesystem and sync haber-object.md to correct state."""
+        """Scan filesystem and sync haber-object.md to correct state.
+
+        Uses force=True to bypass transition validation — this is intentional:
+        filesystem recovery must be able to set any valid state regardless of
+        what the current (possibly stale) state says.
+        """
         run_path = (self.active_runs / slug).resolve()
         if not run_path.exists():
             return "unknown"
@@ -2255,21 +2279,43 @@ class HaberKuratorCore:
             self._state_cache[slug] = rs
         return state
 
+    def get_route(self, slug: str) -> str:
+        """Read current route from cache or haber-object.md."""
+        if slug in self._state_cache:
+            return self._state_cache[slug].route
+        obj = self.active_runs / slug / "haber-object.md"
+        if not obj.exists():
+            return "VERIFIED"
+        content = obj.read_text(encoding="utf-8")
+        m = re.search(r'(?i)route:\s*(\w+)', content)
+        route = m.group(1) if m else "VERIFIED"
+        if route in (ROUTE_VERIFIED, ROUTE_HIGH_SLOP, ROUTE_ESCALATED):
+            return route
+        return "VERIFIED"
+
     def get_next_actions(self, slug: str) -> List[str]:
         """Return suggested next actions based on current state."""
         state = self.get_state(slug)
         guide = {
-            "captured":          ["Fetch & cross-verify news: /haber fetch"],
+            "captured":          ["Verify news: update_state → fact_checking",
+                                  "Or cross-check against sources"],
             "fact_checking":     ["Wait for cross-verification to complete",
-                                  "Check fact-check-report.md"],
-            "cross_verified":    ["Publish to Memos: /haber publish",
-                                  "Or auto-publish: /haber auto-publish"],
+                                  "Check fact-check-report.md",
+                                  "If source insufficient: return to captured",
+                                  "If error found: correct via correction_needed"],
+            "cross_verified":    ["Publish to Memos: update_state → published",
+                                  "If error found pre-publish: correction_needed",
+                                  "If needs rework: return to captured"],
             "published":         ["Monitor for corrections needed",
-                                  "Check: /haber correct if errors found"],
+                                  "Issue correction: update_state → correction_needed",
+                                  "Direct correction: update_state → corrected",
+                                  "Archive if final: update_state → archived"],
             "correction_needed": ["Write correction.md with accurate info",
-                                  "Republish corrected version"],
-            "corrected":         ["Correction published. Archive if done: /haber archive"],
-            "retracted":         ["Story retracted. Archive: /haber archive"],
+                                  "Publish correction: update_state → corrected",
+                                  "If unfixable: update_state → retracted"],
+            "corrected":         ["Correction published.",
+                                  "Archive if done: update_state → archived"],
+            "retracted":         ["Story retracted. Archive: update_state → archived"],
             "archived":          ["Run archived. Review if needed: /haber audit"],
         }
         return guide.get(state, ["No specific next actions for this state."])
