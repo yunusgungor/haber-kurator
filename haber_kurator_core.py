@@ -30,10 +30,11 @@ import urllib.error
 import urllib.parse
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Set
+from typing import List, Dict, Any, Optional, Set, Tuple
 from datetime import datetime
 from dataclasses import dataclass, field
 from enum import Enum
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 logger = logging.getLogger(__name__)
 
@@ -1104,19 +1105,29 @@ class HaberKuratorCore:
             else:
                 sources_to_fetch = by_country
 
+        # Collect (feed_url, source) pairs
+        feed_tasks: List[Tuple[str, NewsSource]] = []
         for key, source in sources_to_fetch.items():
             if not source.rss_feeds:
                 continue
             for feed_url in source.rss_feeds:
+                feed_tasks.append((feed_url, source))
+
+        # Fetch in parallel with ThreadPoolExecutor (v3.2.0)
+        all_items: List[FetchedNewsItem] = []
+        errors: List[str] = []
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            futures = {
+                pool.submit(self._fetch_rss_feed, url, src): (url, src.name)
+                for url, src in feed_tasks
+            }
+            for fut in as_completed(futures):
+                url, name = futures[fut]
                 try:
-                    items = self._fetch_rss_feed(feed_url, source)
+                    items = fut.result()
                     all_items.extend(items)
                 except Exception as e:
-                    errors.append(f"{source.name}/{feed_url}: {str(e)[:60]}")
-                    continue
-                finally:
-                    # Rate limiting: small delay between RSS fetches
-                    time.sleep(CONFIG["rss_delay"])
+                    errors.append(f"{name}/{url}: {str(e)[:60]}")
 
         # Deduplicate by title similarity
         unique = self._deduplicate_news(all_items)
