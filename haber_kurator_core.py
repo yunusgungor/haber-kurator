@@ -1150,8 +1150,51 @@ class HaberKuratorCore:
                     f"{len(errors)} fetch errors.")
         return filtered
 
+    def _fetch_url_with_retry(self, url: str, headers: Dict[str, str],
+                               timeout: int) -> Tuple[bytes, Any]:
+        """Fetch URL with exponential backoff retry for transient errors.
+
+        Retries on: HTTP 429/5xx, URLError, OSError (connection reset).
+        Does NOT retry: 304 (propagated to caller), 4xx (except 429), parse errors.
+
+        Returns:
+            (raw_body_bytes, response_headers)
+        Raises:
+            urllib.error.HTTPError: non-retryable HTTP error (incl. 304)
+            urllib.error.URLError: network error after all retries exhausted
+            OSError: connection error after all retries exhausted
+        """
+        RETRY_DELAYS = [1.0, 2.0, 4.0]
+        last_exc = None
+        for attempt in range(len(RETRY_DELAYS) + 1):
+            try:
+                req = urllib.request.Request(url, headers=headers)
+                with urllib.request.urlopen(req, timeout=timeout) as resp:
+                    return resp.read(), resp.headers
+            except urllib.error.HTTPError as e:
+                # 304 should be handled by the caller (cache hit)
+                if e.code == 304:
+                    raise
+                # Retry on rate-limit (429) and server errors (5xx)
+                if e.code in (429, 500, 502, 503) and attempt < len(RETRY_DELAYS):
+                    last_exc = e
+                    logger.debug(f"Retry {url} (attempt {attempt+1}) after HTTP {e.code}")
+                    time.sleep(RETRY_DELAYS[attempt])
+                    continue
+                raise
+            except (urllib.error.URLError, OSError) as e:
+                if attempt < len(RETRY_DELAYS):
+                    last_exc = e
+                    logger.debug(f"Retry {url} (attempt {attempt+1}) after {type(e).__name__}")
+                    time.sleep(RETRY_DELAYS[attempt])
+                    continue
+                raise
+        # All retries exhausted
+        raise last_exc  # type: ignore
+
     def _fetch_rss_feed(self, feed_url: str, source: NewsSource) -> List[FetchedNewsItem]:
-        """Fetch a single RSS feed with HTTP Conditional GET (ETag/Last-Modified).
+        """Fetch a single RSS feed with HTTP Conditional GET (ETag/Last-Modified)
+        and exponential backoff retry for transient errors.
 
         Returns cached items (from a prior scan in this session) when the
         server responds 304 Not Modified, saving bandwidth on unchanged feeds.
@@ -1169,16 +1212,15 @@ class HaberKuratorCore:
             headers["If-Modified-Since"] = lm
 
         try:
-            req = urllib.request.Request(feed_url, headers=headers)
-            with urllib.request.urlopen(req, timeout=CONFIG["rss_timeout"]) as resp:
-                # Server returned full body — parse and cache headers
-                xml_data = resp.read()
-                resp_etag = resp.headers.get("ETag")
-                resp_lm = resp.headers.get("Last-Modified")
-                self._rss_cache[feed_url] = {
-                    "etag": resp_etag,
-                    "last_modified": resp_lm,
-                }
+            xml_data, resp_headers = self._fetch_url_with_retry(
+                feed_url, headers, CONFIG["rss_timeout"],
+            )
+            resp_etag = resp_headers.get("ETag")
+            resp_lm = resp_headers.get("Last-Modified")
+            self._rss_cache[feed_url] = {
+                "etag": resp_etag,
+                "last_modified": resp_lm,
+            }
 
             root_el = ET.fromstring(xml_data)
             ATOM_NS = "{http://www.w3.org/2005/Atom}"
