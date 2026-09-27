@@ -6,6 +6,9 @@ hallucination, correction, state machine, edge cases.
 
 import sys
 import json
+import urllib.error
+import unittest
+from unittest.mock import MagicMock, patch
 from pathlib import Path
 
 # Add plugin directory to path
@@ -52,6 +55,175 @@ class TestConstants:
         assert sr.score == "PASS"
         assert sr.tier1_count == 0
         assert sr.findings == []
+
+
+# ============================================================
+# TEST 1b: RSS Fetch Retry (E-005)
+# ============================================================
+
+class TestRssFetchRetry:
+    """Unit tests for _fetch_url_with_retry via _fetch_rss_feed.
+
+    Uses patch on urllib.request.urlopen to simulate transient
+    failures, 304 caching, and non-retryable errors.
+    """
+
+    @pytest.fixture
+    def core(self, tmp_path):
+        return HaberKuratorCore(tmp_path)
+
+    # ── helpers ──
+
+    def _make_resp(self, data=b"<rss version='2.0'><channel><item><title>OK</title><link>http://x.com</link></item></channel></rss>",
+                   status=200, headers=None):
+        """Build a mock HTTP response that works as a context manager."""
+        hdrs = {"ETag": '"abc123"'} if headers is None else headers
+        resp = MagicMock()
+        resp.read.return_value = data
+        resp.headers = hdrs
+        resp.status = status
+        resp.__enter__.return_value = resp
+        return resp
+
+    def _http_error(self, code):
+        e = urllib.error.HTTPError("http://test", code, f"HTTP {code}", {}, None)
+        return e
+
+    def _assert_items(self, items, count=1):
+        assert len(items) == count, f"Expected {count} items, got {len(items)}"
+
+    # ── happy path ──
+
+    def test_fetch_success_first_try(self, core):
+        with patch("urllib.request.urlopen", return_value=self._make_resp()):
+            items = core._fetch_rss_feed("http://test", _fake_source())
+        self._assert_items(items, 1)
+
+    # ── retry on transient errors ──
+
+    def test_retry_500_then_ok(self, core):
+        """HTTP 500 → retry → 200 OK."""
+        mock = MagicMock()
+        mock.side_effect = [
+            self._http_error(500),          # attempt 1
+            self._http_error(500),          # attempt 2
+            self._make_resp(),              # attempt 3 — success
+        ]
+        with patch("urllib.request.urlopen", mock):
+            items = core._fetch_rss_feed("http://test", _fake_source())
+        self._assert_items(items, 1)
+
+    def test_retry_timeout_then_ok(self, core):
+        """URLError (timeout) → retry → 200 OK."""
+        mock = MagicMock()
+        mock.side_effect = [
+            urllib.error.URLError("timeout"),
+            self._make_resp(),
+        ]
+        with patch("urllib.request.urlopen", mock):
+            items = core._fetch_rss_feed("http://test", _fake_source())
+        self._assert_items(items, 1)
+
+    def test_retry_connection_reset_then_ok(self, core):
+        """OSError (connection reset) → retry → 200 OK."""
+        mock = MagicMock()
+        mock.side_effect = [
+            OSError(104, "Connection reset by peer"),
+            self._make_resp(),
+        ]
+        with patch("urllib.request.urlopen", mock):
+            items = core._fetch_rss_feed("http://test", _fake_source())
+        self._assert_items(items, 1)
+
+    def test_retry_all_exhausted_returns_empty(self, core):
+        """3 retries exhausted → empty list."""
+        mock = MagicMock()
+        mock.side_effect = [
+            self._http_error(500),
+            self._http_error(500),
+            self._http_error(500),
+            self._http_error(500),  # 4th call = final raise
+        ]
+        with patch("urllib.request.urlopen", mock):
+            items = core._fetch_rss_feed("http://test", _fake_source())
+        self._assert_items(items, 0)
+
+    # ── 304 passthrough ──
+
+    def test_304_without_cache_returns_empty(self, core):
+        """304 without prior cache → empty."""
+        with patch("urllib.request.urlopen",
+                                 side_effect=self._http_error(304)):
+            items = core._fetch_rss_feed("http://test", _fake_source())
+        self._assert_items(items, 0)
+
+    def test_304_with_cache_returns_cached(self, tmp_path):
+        """304 with cached items → returns cached."""
+        c = HaberKuratorCore(tmp_path)
+        # Seed cache with pre-fetched items
+        c._rss_cache["http://test"] = {
+            "etag": '"stale"',
+            "items": [FetchedNewsItem(title="cached", url="http://x.com",
+                                       source_name="Test", source_tier=SourceTier.MAJOR,
+                                       category="news")],
+        }
+        with patch("urllib.request.urlopen",
+                                 side_effect=self._http_error(304)):
+            items = c._fetch_rss_feed("http://test", _fake_source())
+        assert len(items) == 1
+        assert items[0].title == "cached"
+
+    # ── non-retryable 4xx ──
+
+    def test_404_fast_fail(self, core):
+        """404 is never retried."""
+        mock = MagicMock()
+        mock.side_effect = self._http_error(404)
+        with patch("urllib.request.urlopen", mock):
+            items = core._fetch_rss_feed("http://test", _fake_source())
+        self._assert_items(items, 0)
+        # Should have only been called once (no retry)
+        assert mock.call_count <= 1
+
+    def test_403_fast_fail(self, core):
+        """403 is never retried."""
+        mock = MagicMock()
+        mock.side_effect = self._http_error(403)
+        with patch("urllib.request.urlopen", mock):
+            items = core._fetch_rss_feed("http://test", _fake_source())
+        self._assert_items(items, 0)
+        assert mock.call_count <= 1
+
+    def test_429_is_retried(self, core):
+        """429 is retried (rate-limit)."""
+        mock = MagicMock()
+        mock.side_effect = [
+            self._http_error(429),
+            self._http_error(429),
+            self._make_resp(),
+        ]
+        with patch("urllib.request.urlopen", mock):
+            items = core._fetch_rss_feed("http://test", _fake_source())
+        self._assert_items(items, 1)
+
+    # ── bad RSS parse ──
+
+    def test_bad_xml_returns_empty(self, core):
+        """Non-XML response → empty, no crash."""
+        resp = self._make_resp(data=b"not xml at all", headers={"ETag": '"x"'})
+        with patch("urllib.request.urlopen", return_value=resp):
+            items = core._fetch_rss_feed("http://test", _fake_source())
+        self._assert_items(items, 0)
+
+
+def _fake_source():
+    from haber_kurator_core import NewsSource
+    return NewsSource(
+        name="Test",
+        base_url="http://x.com",
+        category="news",
+        tier=SourceTier.MAJOR,
+    )
 
 
 # ============================================================
