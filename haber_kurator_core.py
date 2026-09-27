@@ -42,9 +42,11 @@ VERSION = "3.1.0"
 
 CONFIG = {
     "version": "3.1.0",
-    "min_verification_level": 1,  # Minimum level to publish (0-3)
-    "rss_timeout": 5,             # Seconds per RSS fetch
-    "rss_delay": 0.3,             # (unused since v3.2 — kept for backward compat)
+    "min_verification_level": 1,          # Minimum level to publish (0-3)
+    "rss_timeout": 5,                     # Seconds per RSS fetch
+    "rss_delay": 0.3,                     # (unused since v3.2 — kept for backward compat)
+    "rss_max_workers": 8,                 # Parallel RSS fetch pool size
+    "rss_retry_delays": [1.0, 2.0, 4.0],  # Exponential backoff intervals (seconds)
 }
 
 # ══════════════════════════════════════════════════════════════
@@ -1116,7 +1118,7 @@ class HaberKuratorCore:
         # Fetch in parallel with ThreadPoolExecutor (v3.2.0)
         all_items: List[FetchedNewsItem] = []
         errors: List[str] = []
-        with ThreadPoolExecutor(max_workers=8) as pool:
+        with ThreadPoolExecutor(max_workers=CONFIG["rss_max_workers"]) as pool:
             futures = {
                 pool.submit(self._fetch_rss_feed, url, src): (url, src.name)
                 for url, src in feed_tasks
@@ -1164,9 +1166,9 @@ class HaberKuratorCore:
             urllib.error.URLError: network error after all retries exhausted
             OSError: connection error after all retries exhausted
         """
-        RETRY_DELAYS = [1.0, 2.0, 4.0]
+        retry_delays = CONFIG["rss_retry_delays"]
         last_exc = None
-        for attempt in range(len(RETRY_DELAYS) + 1):
+        for attempt in range(len(retry_delays) + 1):
             try:
                 req = urllib.request.Request(url, headers=headers)
                 with urllib.request.urlopen(req, timeout=timeout) as resp:
@@ -1176,17 +1178,17 @@ class HaberKuratorCore:
                 if e.code == 304:
                     raise
                 # Retry on rate-limit (429) and server errors (5xx)
-                if e.code in (429, 500, 502, 503) and attempt < len(RETRY_DELAYS):
+                if e.code in (429, 500, 502, 503) and attempt < len(retry_delays):
                     last_exc = e
                     logger.debug(f"Retry {url} (attempt {attempt+1}) after HTTP {e.code}")
-                    time.sleep(RETRY_DELAYS[attempt])
+                    time.sleep(retry_delays[attempt])
                     continue
                 raise
             except (urllib.error.URLError, OSError) as e:
-                if attempt < len(RETRY_DELAYS):
+                if attempt < len(retry_delays):
                     last_exc = e
                     logger.debug(f"Retry {url} (attempt {attempt+1}) after {type(e).__name__}")
-                    time.sleep(RETRY_DELAYS[attempt])
+                    time.sleep(retry_delays[attempt])
                     continue
                 raise
         # All retries exhausted
