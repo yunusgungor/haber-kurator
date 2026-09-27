@@ -897,6 +897,9 @@ class HaberKuratorCore:
         self._init_db()
         self._load_state_cache()
 
+        # RSS conditional GET cache (v3.2.0) — per-session, ephemeral
+        self._rss_cache: Dict[str, Dict[str, Any]] = {}
+
     # ──────────────────────────────────────────────────────────
     # SETUP & MIGRATION
     # ──────────────────────────────────────────────────────────
@@ -1137,15 +1140,34 @@ class HaberKuratorCore:
         return filtered
 
     def _fetch_rss_feed(self, feed_url: str, source: NewsSource) -> List[FetchedNewsItem]:
-        """Fetch a single RSS feed and parse items."""
-        items = []
+        """Fetch a single RSS feed with HTTP Conditional GET (ETag/Last-Modified).
+
+        Returns cached items (from a prior scan in this session) when the
+        server responds 304 Not Modified, saving bandwidth on unchanged feeds.
+        Cache is per-session (ephemeral) — lost on process restart.
+        """
+        items: List[FetchedNewsItem] = []
+        cached = self._rss_cache.get(feed_url, {})
+        headers = {"User-Agent": f"Haber-Kuratör/{VERSION} NewsReader"}
+        etag = cached.get("etag")
+        lm = cached.get("last_modified")
+
+        if etag:
+            headers["If-None-Match"] = etag
+        if lm:
+            headers["If-Modified-Since"] = lm
+
         try:
-            req = urllib.request.Request(
-                feed_url,
-                headers={"User-Agent": f"Haber-Kuratör/{VERSION} NewsReader"}
-            )
+            req = urllib.request.Request(feed_url, headers=headers)
             with urllib.request.urlopen(req, timeout=CONFIG["rss_timeout"]) as resp:
+                # Server returned full body — parse and cache headers
                 xml_data = resp.read()
+                resp_etag = resp.headers.get("ETag")
+                resp_lm = resp.headers.get("Last-Modified")
+                self._rss_cache[feed_url] = {
+                    "etag": resp_etag,
+                    "last_modified": resp_lm,
+                }
 
             root_el = ET.fromstring(xml_data)
             ATOM_NS = "{http://www.w3.org/2005/Atom}"
@@ -1170,7 +1192,7 @@ class HaberKuratorCore:
                         guid=guid,
                     ))
 
-            # Atom
+            # Atom fallback
             if not items:
                 for entry in root_el.findall(f".//{ATOM_NS}entry"):
                     t_el = entry.find(f"{ATOM_NS}title")
@@ -1195,9 +1217,18 @@ class HaberKuratorCore:
                             guid=link or title,
                         ))
 
+            # Store parsed items in cache for future 304 hits
+            self._rss_cache[feed_url]["items"] = items
+
+        except urllib.error.HTTPError as e:
+            if e.code == 304 and cached.get("items"):
+                # 304 Not Modified — return previously cached items
+                logger.debug(f"304 for {feed_url} — using cached items ({len(cached['items'])})")
+                return cached["items"]
+            logger.debug(f"HTTP {e.code} for {feed_url}: {e}")
         except ET.ParseError as e:
             logger.debug(f"XML parse error for {feed_url}: {e}")
-        except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
+        except (urllib.error.URLError, OSError) as e:
             logger.debug(f"Network error for {feed_url}: {e}")
 
         return items
