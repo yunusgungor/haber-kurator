@@ -44,7 +44,7 @@ CONFIG = {
     "version": "3.1.0",
     "min_verification_level": 1,  # Minimum level to publish (0-3)
     "rss_timeout": 5,             # Seconds per RSS fetch
-    "rss_delay": 0.3,             # Delay (s) between RSS fetches to avoid rate limiting
+    "rss_delay": 0.3,             # (unused since v3.2 — kept for backward compat)
 }
 
 # ══════════════════════════════════════════════════════════════

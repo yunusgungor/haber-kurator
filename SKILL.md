@@ -155,7 +155,7 @@ The following bugs were fixed in the v3.1.0 maintenance pass:
 - Migrated from JSON file (`.state_cache/runs_state.json`) to SQLite (`.state_cache/state.db`). Legacy auto-migrates and gets renamed to `.json.migrated`.
 
 ### P2 — Rate Limiting
-- Added `CONFIG["rss_delay"] = 0.3` (configurable seconds between RSS fetches) to prevent IP blocking when fetching 73+ RSS feeds.
+- Parallel RSS fetching via `ThreadPoolExecutor(max_workers=8)` replaces sequential `time.sleep(rss_delay)` loop (v3.2+).
 
 ### P0 — memos_cli URL Doubling → HTTP 501 (Fixed May 18 2026)
 - **Bug:** `memos_publisher` tool (and any direct `memos_cli.py` usage) returned HTTP 501.
