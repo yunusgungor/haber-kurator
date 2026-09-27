@@ -81,21 +81,20 @@
 | 23 | **Anadolu Ajansı (AA)** | Genel Haber | ✅ `aa.com.tr/rss/ajansguncel.xml` | Türkiye'nin resmî haber ajansı. 1920'den beri. Wire service. |
 | 24 | **BBC Türkçe** | Genel Haber | ✅ `feeds.bbci.co.uk/turkce/rss.xml` | BBC'nin Türkçe servisi. Kraliyet tüzüğü ile bağımsız. |
 | 25 | **Euronews Türkçe** | Genel Haber | ✅ `tr.euronews.com/rss` | Çok dilli haber ağının Türkçe servisi. |
-| 26 | **Deutsche Welle Türkçe** | Genel Haber | ✅ `rss.dw.com/rdf/Turkish` | Alman kamu yayıncısının Türkçe servisi. |
-| 27 | **Bloomberg HT** | Ekonomi/Finans | ✅ `bloomberght.com/rss` | Bloomberg'in Türkiye ortaklığı. Finans haberciliği. |
+| 26 | **Bloomberg HT** | Ekonomi/Finans | ✅ `bloomberght.com/rss` | Bloomberg'in Türkiye ortaklığı. Finans haberciliği. |
 
 ### 🟠 Tier 2 — SPECIALIZED (Uzman / Bağımsız)
 
 | # | Kaynak | Kategori | RSS | Özellik |
 |---|--------|----------|-----|---------|
-| 28 | **T24** | Genel Haber | ❌ RSS kapandı (Mayıs 2026) | Bağımsız haber sitesi. |
-| 29 | **Medyascope** | Genel Haber | ❌ RSS 403 (Mayıs 2026) | Bağımsız haber platformu. |
-| 30 | **Diken** | Genel Haber | ❌ RSS 403 (Mayıs 2026) | Bağımsız, eleştirel haber sitesi. |
-| 31 | **BirGün** | Genel Haber | ✅ `birgun.net/rss` | Bağımsız sol gazete. Hak haberciliği. |
-| 32 | **Sözcü** | Genel Haber | ✅ `sozcu.com.tr/feeds-haberler` | Türkiye'nin en çok okunan gazetelerinden. |
-| 33 | **Cumhuriyet** | Genel Haber | ✅ `cumhuriyet.com.tr/rss/son_dakika.xml` | 1924'ten beri. Köklü gazetecilik geleneği. |
-| 34 | **Hürriyet** | Genel Haber | ✅ `rss.hurriyet.com.tr/` | Geniş muhabir ağı. Güncel haber ve analiz. |
-| 35 | **Webrazzi** | Teknoloji | ✅ `webrazzi.com/feed/` | Türkiye teknoloji haberciliği. Girişim odaklı. |
+| 27 | **T24** | Genel Haber | ⚠️ Google News RSS (`news.google.com/rss/search?q=site:t24.com.tr`) | Bağımsız haber sitesi. Direkt RSS Cloudflare 403. |
+| 28 | **Medyascope** | Genel Haber | ✅ `medyascope.tv/feed/` | Bağımsız haber platformu. RSS düzeltildi (E-002). |
+| 29 | **Diken** | Genel Haber | ✅ `diken.com.tr/feed/` | Bağımsız, eleştirel haber sitesi. RSS düzeltildi (E-002). |
+| 30 | **BirGün** | Genel Haber | ✅ `birgun.net/rss` | Bağımsız sol gazete. Hak haberciliği. |
+| 31 | **Sözcü** | Genel Haber | ✅ `sozcu.com.tr/feeds-haberler` | Türkiye'nin en çok okunan gazetelerinden. |
+| 32 | **Cumhuriyet** | Genel Haber | ✅ `cumhuriyet.com.tr/rss/son_dakika.xml` | 1924'ten beri. Köklü gazetecilik geleneği. |
+| 33 | **Hürriyet** | Genel Haber | ✅ `rss.hurriyet.com.tr/` | Geniş muhabir ağı. Güncel haber ve analiz. |
+| 34 | **Webrazzi** | Teknoloji | ✅ `webrazzi.com/feed/` | Türkiye teknoloji haberciliği. Girişim odaklı. |
 
 ### Çapraz Doğrulama Kuralları (Türkiye Haberleri İçin)
 

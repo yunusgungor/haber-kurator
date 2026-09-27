@@ -549,19 +549,6 @@ NEWS_SOURCES: Dict[str, NewsSource] = {
         country="turkey",
         notes="Çok dilli haber ağının Türkçe servisi. ⚠️ RSS feed kullanılamıyor (Mayıs 2026).",
     ),
-    "dw_turkce": NewsSource(
-        name="Deutsche Welle Türkçe",
-        base_url="https://www.dw.com/tr",
-        category="news",
-        tier=SourceTier.MAJOR,
-        rss_feeds=[
-            "http://rss.dw.de/xml/rss-tur-pol-tur",
-            "http://rss.dw.de/xml/rss-tur-eco",
-        ],
-        language="tr",
-        country="turkey",
-        notes="Alman uluslararası kamu yayıncısının Türkçe servisi. Bağımsız ve tarafsız haber.",
-    ),
     "bloomberght": NewsSource(
         name="Bloomberg HT",
         base_url="https://www.bloomberght.com",
@@ -579,30 +566,30 @@ NEWS_SOURCES: Dict[str, NewsSource] = {
         base_url="https://t24.com.tr",
         category="news",
         tier=SourceTier.SPECIALIZED,
-        rss_feeds=[],  # RSS kapandı (Mayıs 2026) — çalışan feed bulunamadı
+        rss_feeds=["https://news.google.com/rss/search?q=site:t24.com.tr&hl=tr&gl=TR&ceid=TR:tr"],
         language="tr",
         country="turkey",
-        notes="Bağımsız haber sitesi. ⚠️ RSS feed kullanılamıyor (Mayıs 2026).",
+        notes="Bağımsız haber sitesi. Direkt RSS kapalı (Cloudflare WAF). Google News RSS kullanılıyor (E-002).",
     ),
     "medyascope": NewsSource(
         name="Medyascope",
         base_url="https://medyascope.tv",
         category="news",
         tier=SourceTier.SPECIALIZED,
-        rss_feeds=[],  # RSS erişimi engellendi (403) — Mayıs 2026
+        rss_feeds=["https://medyascope.tv/feed/"],
         language="tr",
         country="turkey",
-        notes="Bağımsız haber platformu. ⚠️ RSS feed erişime kapalı (403 Forbidden). Podcast feed mevcut.",
+        notes="Bağımsız haber platformu. RSS feed testi 2026-09-27: HTTP 200, 12 item (barsa E-002).",
     ),
     "diken": NewsSource(
         name="Diken",
         base_url="https://www.diken.com.tr",
         category="news",
         tier=SourceTier.SPECIALIZED,
-        rss_feeds=[],  # RSS erişimi engellendi (403) — Mayıs 2026
+        rss_feeds=["https://www.diken.com.tr/feed/"],
         language="tr",
         country="turkey",
-        notes="Bağımsız haber sitesi. ⚠️ RSS feed erişime kapalı (403 Forbidden).",
+        notes="Bağımsız haber sitesi. RSS feed testi 2026-09-27: HTTP 200, 30 item (barsa E-002).",
     ),
     "birgun": NewsSource(
         name="BirGün",
