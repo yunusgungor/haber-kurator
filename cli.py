@@ -68,6 +68,8 @@ def register_cli(haber_parser, core: HaberKuratorCore):
                                   help="Category filter")
     auto_pub_parser.add_argument("--country", type=str, default=None,
                                   help="Filter by country (e.g. 'turkey', 'global')")
+    auto_pub_parser.add_argument("--trending", "-t", action="store_true",
+                                  help="🔥 Trending mode: fetch popular feeds, 24h recency, most-covered first")
 
     subs.add_parser("sources", help="📡 List all configured news sources by credibility tier")
 
@@ -212,6 +214,7 @@ def register_cli(haber_parser, core: HaberKuratorCore):
             limit = getattr(args, "limit", 5)
             category = getattr(args, "category", None)
             country = getattr(args, "country", None)
+            trending = getattr(args, "trending", False)
             from .writer_agent import WriterAgent
             agent = WriterAgent(core)
             # Enable Turkish content generation via LLM (falls back to template if unavailable)
@@ -220,8 +223,10 @@ def register_cli(haber_parser, core: HaberKuratorCore):
                 agent.set_llm(True)
             except ImportError:
                 pass
-            with console.status(f"[bold cyan]🤖 Writer Agent publishing {limit} news to Memos...[/bold cyan]"):
-                results = agent.auto_publish(max_articles=limit, category=category, country=country)
+            label = "🔥 trending " if trending else ""
+            with console.status(f"[bold cyan]🤖 Writer Agent publishing {limit} {label}news to Memos...[/bold cyan]"):
+                results = agent.auto_publish(max_articles=limit, category=category,
+                                             country=country, trending=trending)
             console.print(f"\n[bold green]📊 Writer Agent — RAPOR[/bold green]")
             console.print(f"   Yayınlanan: {results['published']}")
             console.print(f"   Atlanan:    {results['skipped']}")

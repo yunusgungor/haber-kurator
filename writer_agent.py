@@ -375,16 +375,22 @@ class WriterAgent:
             _logger.warning(f"  📤 Memos UPDATE: {str(e)[:60]}")
             return False
 
-    def auto_publish(self, max_articles: int = 5, category: str = None, country: str = None) -> dict:
-        """Full pipeline: fetch → verify → generate → publish."""
+    def auto_publish(self, max_articles: int = 5, category: str = None,
+                     country: str = None, trending: bool = False) -> dict:
+        """Full pipeline: fetch → verify → generate → publish.
+
+        When trending=True: fetches popular/trending RSS feeds,
+        uses 24h recency, and sorts by source_count (most-covered first).
+        """
         import logging
         _logger = logging.getLogger(__name__)
-        _logger.info("📡 Haberler çekiliyor...")
-        items = self.core.fetch_all_news(category, country)
+        _logger.info("📡 Haberler çekiliyor..." + (" (trending)" if trending else ""))
+        items = self.core.fetch_all_news(category, country, trending=trending)
         clusters = self.core.cluster_stories(items)
         _logger.info(f"✅ {len(items)} haber, {len(clusters)} küme\n")
 
-        # Score and sort clusters by verification level + source count
+        # Score and sort clusters by source coverage
+        # (in trending mode, source_count reflects multi-source popularity)
         scored = []
         for c in sorted(clusters, key=lambda x: x.get("source_count", 0), reverse=True):
             ver = self.core.cross_verify_story(c)

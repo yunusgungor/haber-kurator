@@ -127,6 +127,7 @@ class NewsSource:
     category: str                # news, technology, business, science, local
     tier: SourceTier = SourceTier.MAJOR
     rss_feeds: List[str] = field(default_factory=list)
+    trending_feeds: List[str] = field(default_factory=list)  # /popular/ /trending/ feeds
     language: str = "en"
     country: str = "global"
     notes: str = ""
@@ -1082,7 +1083,8 @@ class HaberKuratorCore:
     # 2. NEWS FETCHING — Multi-Source RSS Aggregation
     # ══════════════════════════════════════════════════════════
 
-    def fetch_all_news(self, category: str = None, country: str = None) -> List[FetchedNewsItem]:
+    def fetch_all_news(self, category: str = None, country: str = None,
+                       trending: bool = False) -> List[FetchedNewsItem]:
         """Fetch latest news from configured sources.
 
         Pulls from every source that has RSS feeds defined.
@@ -1091,11 +1093,13 @@ class HaberKuratorCore:
         Args:
             category: Optional filter ('news', 'technology', 'business', 'science')
             country: Optional filter by country code (e.g. 'turkey', 'global')
+            trending: When True, also fetch from sources' trending_feeds and
+                      apply tighter recency (24h instead of 48h).
 
         Returns:
             List of FetchedNewsItem with source and URL.
         """
-        logger.info(f"fetch_all_news called (category={category}, country={country})")
+        logger.info(f"fetch_all_news called (category={category}, country={country}, trending={trending})")
         all_items: List[FetchedNewsItem] = []
         errors = []
 
@@ -1104,7 +1108,6 @@ class HaberKuratorCore:
             sources_to_fetch = self.get_sources_by_category(category)
         if country:
             by_country = self.get_sources_by_country(country)
-            # Intersect with existing filter if both category and country are set
             if category:
                 sources_to_fetch = {k: v for k, v in sources_to_fetch.items() if k in by_country}
             else:
@@ -1117,6 +1120,10 @@ class HaberKuratorCore:
                 continue
             for feed_url in source.rss_feeds:
                 feed_tasks.append((feed_url, source))
+            # In trending mode, also fetch trending_feeds from matching sources
+            if trending and source.trending_feeds:
+                for feed_url in source.trending_feeds:
+                    feed_tasks.append((feed_url, source))
 
         # Fetch in parallel with ThreadPoolExecutor (v3.2.0)
         all_items: List[FetchedNewsItem] = []
@@ -1150,8 +1157,8 @@ class HaberKuratorCore:
             if not is_promo:
                 filtered.append(item)
 
-        # Filter out old news (recency check)
-        max_age = CONFIG.get("news_max_age_hours", 48)
+        # Filter out old news (recency check — tighter 24h in trending mode)
+        max_age = 24 if trending else CONFIG.get("news_max_age_hours", 48)
         fresh = []
         stale_count = 0
         for item in filtered:
