@@ -69,7 +69,7 @@ def register_cli(haber_parser, core: HaberKuratorCore):
     auto_pub_parser.add_argument("--country", type=str, default=None,
                                   help="Filter by country (e.g. 'turkey', 'global')")
     auto_pub_parser.add_argument("--trending", "-t", action="store_true",
-                                  help="🔥 Trending mode: fetch popular feeds, 24h recency, most-covered first")
+                                  help="🔥 Trending: cross-source coverage sıralaması (en çok kaynakta geçen haber önce). News kategorisinde avg 5.4 kaynak/küme (E-012).")
 
     subs.add_parser("sources", help="📡 List all configured news sources by credibility tier")
 
