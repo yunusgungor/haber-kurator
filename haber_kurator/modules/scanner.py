@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
+from haber_kurator.modules.llm import call_llm_with_fallback
 from haber_kurator.modules.models import (
     VERSION,
     SourceTier, VerificationLevel,
@@ -154,29 +155,16 @@ Target total: 12/12
 Return ONLY the markdown brief. No extra commentary."""
 
         try:
-            if llm and hasattr(llm, "acomplete"):
-                response = await llm.acomplete([
-                    {"role": "system", "content": "You are an expert news editor who writes tight, sourced briefs."},
-                    {"role": "user", "content": prompt},
-                ])
-                text = response.text
-            else:
-                try:
-                    from agent.auxiliary_client import async_call_llm
-                except ImportError as _ie:
-                    raise RuntimeError(
-                        "Hermes LLM unavailable outside agent context. "
-                        "Use '/haber brief <slug>' via Hermes agent instead."
-                    ) from _ie
-                messages = [
-                    {"role": "system", "content": "You are an expert news editor."},
-                    {"role": "user", "content": prompt},
-                ]
-                raw = await async_call_llm(task="curator", messages=messages)
-                try:
-                    text = raw.choices[0].message.content
-                except (AttributeError, IndexError):
-                    text = str(raw)
+            messages = [
+                {"role": "system", "content": "You are an expert news editor who writes tight, sourced briefs."},
+                {"role": "user", "content": prompt},
+            ]
+            text = await call_llm_with_fallback(messages, llm, task="curator")
+            if text is None:
+                raise RuntimeError(
+                    "Hermes LLM unavailable outside agent context. "
+                    "Use '/haber brief <slug>' via Hermes agent instead."
+                )
 
             text = text.strip()
             if text.startswith("```"):
@@ -344,29 +332,16 @@ QUALITY GATES:
 - [ ] [Özet] - [Detaylar] - [Kaynak] structure used"""
 
         try:
-            if llm and hasattr(llm, "acomplete"):
-                response = await llm.acomplete([
-                    {"role": "system", "content": "You are a Writer Agent for Haber Kuratör News. You produce ONLY source-attributed factual news. Hallucination = system failure."},
-                    {"role": "user", "content": prompt},
-                ])
-                text = response.text
-            else:
-                try:
-                    from agent.auxiliary_client import async_call_llm
-                except ImportError as _ie:
-                    raise RuntimeError(
-                        "Hermes LLM unavailable outside agent context. "
-                        "Use '/haber draft <slug>' via Hermes agent instead."
-                    ) from _ie
-                messages = [
-                    {"role": "system", "content": "You are a Writer Agent for Haber Kuratör News. Source-attributed factual news only."},
-                    {"role": "user", "content": prompt},
-                ]
-                raw = await async_call_llm(task="writer", messages=messages)
-                try:
-                    text = raw.choices[0].message.content
-                except (AttributeError, IndexError):
-                    text = str(raw)
+            messages = [
+                {"role": "system", "content": "You are a Writer Agent for Haber Kuratör News. You produce ONLY source-attributed factual news. Hallucination = system failure."},
+                {"role": "user", "content": prompt},
+            ]
+            text = await call_llm_with_fallback(messages, llm, task="writer")
+            if text is None:
+                raise RuntimeError(
+                    "Hermes LLM unavailable outside agent context. "
+                    "Use '/haber draft <slug>' via Hermes agent instead."
+                )
 
             text = text.strip()
             if text.startswith("```"):
@@ -375,7 +350,6 @@ QUALITY GATES:
 
             draft_path = run_path / "draft-package.md"
             draft_path.write_text(text, encoding="utf-8")
-            # Draft hazırlandı — state cross_verified olarak kalır
             return {"slug": slug, "status": "drafted", "length": len(text)}
 
         except Exception as e:
@@ -506,29 +480,16 @@ CRITICAL RULES:
 - Generic feedback is REJECTED"""
 
         try:
-            if llm and hasattr(llm, "acomplete"):
-                response = await llm.acomplete([
-                    {"role": "system", "content": "You are a strict Verifier Agent for Haber Kuratör News. Hallucination detection is your primary job."},
-                    {"role": "user", "content": prompt},
-                ])
-                text = response.text
-            else:
-                try:
-                    from agent.auxiliary_client import async_call_llm
-                except ImportError as _ie:
-                    raise RuntimeError(
-                        "Hermes LLM unavailable outside agent context. "
-                        "Use '/haber verify <slug>' via Hermes agent instead."
-                    ) from _ie
-                messages = [
-                    {"role": "system", "content": "You are a strict Verifier Agent for Haber Kuratör News."},
-                    {"role": "user", "content": prompt},
-                ]
-                raw = await async_call_llm(task="curator", messages=messages)
-                try:
-                    text = raw.choices[0].message.content
-                except (AttributeError, IndexError):
-                    text = str(raw)
+            messages = [
+                {"role": "system", "content": "You are a strict Verifier Agent for Haber Kuratör News. Hallucination detection is your primary job."},
+                {"role": "user", "content": prompt},
+            ]
+            text = await call_llm_with_fallback(messages, llm, task="curator")
+            if text is None:
+                raise RuntimeError(
+                    "Hermes LLM unavailable outside agent context. "
+                    "Use '/haber verify <slug>' via Hermes agent instead."
+                )
 
             text = text.strip()
             if text.startswith("```"):
@@ -862,29 +823,16 @@ Return EXACTLY valid JSON:
 }}"""
 
         try:
-            if llm and hasattr(llm, "acomplete"):
-                response = await llm.acomplete([
-                    {"role": "system", "content": "You are a strict news editor scoring against a rubric."},
-                    {"role": "user", "content": prompt},
-                ])
-                text = response.text
-            else:
-                try:
-                    from agent.auxiliary_client import async_call_llm
-                except ImportError as _ie:
-                    raise RuntimeError(
-                        "Hermes LLM unavailable outside agent context. "
-                        "Use '/haber score <slug>' via Hermes agent instead."
-                    ) from _ie
-                messages = [
-                    {"role": "system", "content": "You are a strict news editor."},
-                    {"role": "user", "content": prompt},
-                ]
-                raw = await async_call_llm(task="curator", messages=messages)
-                try:
-                    text = raw.choices[0].message.content
-                except (AttributeError, IndexError):
-                    text = str(raw)
+            messages = [
+                {"role": "system", "content": "You are a strict news editor scoring against a rubric."},
+                {"role": "user", "content": prompt},
+            ]
+            text = await call_llm_with_fallback(messages, llm, task="curator")
+            if text is None:
+                raise RuntimeError(
+                    "Hermes LLM unavailable outside agent context. "
+                    "Use '/haber score <slug>' via Hermes agent instead."
+                )
 
             json_match = re.search(r"(\{.*\})", text, re.DOTALL)
             if json_match:
@@ -970,28 +918,15 @@ Return as markdown:
 ..."""
 
         try:
-            if llm and hasattr(llm, "acomplete"):
-                response = await llm.acomplete([
-                    {"role": "system", "content": "You are a news content analyst."},
-                    {"role": "user", "content": prompt},
-                ])
-                text = response.text
-            else:
-                try:
-                    from agent.auxiliary_client import async_call_llm
-                except ImportError as _ie:
-                    raise RuntimeError(
-                        "Hermes LLM unavailable outside agent context."
-                    ) from _ie
-                messages = [
-                    {"role": "system", "content": "You are a news content analyst."},
-                    {"role": "user", "content": prompt},
-                ]
-                raw = await async_call_llm(task="curator", messages=messages)
-                try:
-                    text = raw.choices[0].message.content
-                except (AttributeError, IndexError):
-                    text = str(raw)
+            messages = [
+                {"role": "system", "content": "You are a news content analyst."},
+                {"role": "user", "content": prompt},
+            ]
+            text = await call_llm_with_fallback(messages, llm, task="curator")
+            if text is None:
+                raise RuntimeError(
+                    "Hermes LLM unavailable outside agent context."
+                )
 
             text = text.strip()
             if text.startswith("```"):

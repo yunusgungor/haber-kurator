@@ -1404,8 +1404,10 @@ class TestLLMFunctions:
                 raise ValueError("LLM API error")
             mock_llm.acomplete = fail
             result = await core.generate_brief(slug, llm=mock_llm)
+            # call_llm_with_fallback catches the acompleter error and falls back
+            # to Hermes auxiliary (unavailable in test context → None → message)
             assert "error" in result
-            assert "LLM API error" in result["error"]
+            assert "LLM unavailable" in result["error"]
         asyncio.run(_test())
 
     def test_generate_brief_strips_triple_backticks(self, core):

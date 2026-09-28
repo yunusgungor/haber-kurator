@@ -18,8 +18,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
-logger = logging.getLogger(__name__)
+from haber_kurator.modules.llm import call_llm_sync
 
+logger = logging.getLogger(__name__)
 
 def _extract_section(text: str, start_tag: str, end_tag: str | None) -> str:
     """Extract content between start_tag and end_tag from a structured text."""
@@ -46,36 +47,15 @@ class WriterMixin:
                   timeout: int = 60) -> Optional[str]:
         """Call the Hermes auxiliary LLM and return the text response.
 
-        Works in both async and sync contexts. Always creates a fresh event
-        loop to avoid asyncio conflicts outside the agent runtime.
+        Uses call_llm_sync from the shared modules/llm.py module.
         """
-        try:
-            import asyncio
-            from agent.auxiliary_client import async_call_llm
-
-            async def do_call():
-                messages = [
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user},
-                ]
-                raw = await async_call_llm(task=task, messages=messages)
-                try:
-                    text = raw.choices[0].message.content
-                except (AttributeError, IndexError):
-                    text = str(raw)
-                return text.strip().strip('"').strip("'").strip('»').strip('«')
-
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                result = loop.run_until_complete(do_call())
-            finally:
-                loop.close()
-
-            if result and len(result) > 3:
-                return result
-        except Exception as e:
-            logger.debug("_call_llm error: %s: %s", type(e).__name__, str(e)[:200])
+        messages = [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ]
+        result = call_llm_sync(messages, task=task, timeout=timeout)
+        if result and len(result) > 3:
+            return result.strip('"').strip("'").strip('»').strip('«')
         return None
 
     def _translate_headline(self, text: str) -> str:
