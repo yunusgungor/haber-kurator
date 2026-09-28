@@ -1084,7 +1084,7 @@ class HaberKuratorCore:
     # ══════════════════════════════════════════════════════════
 
     def fetch_all_news(self, category: str = None, country: str = None,
-                       trending: bool = False) -> List[FetchedNewsItem]:
+                       trending: bool = False, today_only: bool = False) -> List[FetchedNewsItem]:
         """Fetch latest news from configured sources.
 
         Pulls from every source that has RSS feeds defined.
@@ -1095,11 +1095,14 @@ class HaberKuratorCore:
             country: Optional filter by country code (e.g. 'turkey', 'global')
             trending: When True, also fetch from sources' trending_feeds and
                       apply tighter recency (24h instead of 48h).
+            today_only: When True, filter to current calendar day only (kullanıcının
+                       "bugünün haberleri" beklentisi için).
 
         Returns:
             List of FetchedNewsItem with source and URL.
         """
-        logger.info(f"fetch_all_news called (category={category}, country={country}, trending={trending})")
+        logger.info(f"fetch_all_news called (category={category}, country={country}, "
+                    f"trending={trending}, today_only={today_only})")
         all_items: List[FetchedNewsItem] = []
         errors = []
 
@@ -1162,14 +1165,16 @@ class HaberKuratorCore:
         fresh = []
         stale_count = 0
         for item in filtered:
-            if self._is_fresh(item.published, max_age_hours=max_age):
+            passes_age = self._is_today(item.published) if today_only else self._is_fresh(item.published, max_age_hours=max_age)
+            if passes_age:
                 fresh.append(item)
             else:
                 stale_count += 1
 
+        label = "today" if today_only else f"{max_age}h"
         logger.info(f"fetch_all_news: {len(all_items)} raw, {len(unique)} unique, "
                     f"{len(unique) - len(filtered)} promo filtered, "
-                    f"{stale_count} stale (> {max_age}h), "
+                    f"{stale_count} stale (> {label}), "
                     f"{len(fresh)} final. "
                     f"{len(errors)} fetch errors.")
         return fresh
@@ -1346,6 +1351,41 @@ class HaberKuratorCore:
         for y in range(datetime.now().year - 2, datetime.now().year):
             if str(y) in published:
                 return False
+
+        return True  # unparseable → keep
+
+    @staticmethod
+    def _is_today(published: str) -> bool:
+        """Check if a published-date string falls on the current calendar day.
+
+        Uses local timezone for calendar day boundary. Returns True for
+        unparseable dates (fail-open — better than dropping everything).
+        """
+        if not published or not published.strip():
+            return True
+
+        today = datetime.now(timezone.utc).date()
+
+        # Try RFC 2822 (e.g. "Mon, 28 Sep 2026 14:30:00 +0300")
+        try:
+            dt = datetime.strptime(published[:25], "%a, %d %b %Y %H:%M:%S")
+            return dt.replace(tzinfo=timezone.utc).date() == today
+        except (ValueError, IndexError):
+            pass
+
+        # Try ISO-8601 (e.g. "2026-09-28T14:30:00Z")
+        try:
+            dt = datetime.fromisoformat(published.rstrip("Z"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt.date() == today
+        except (ValueError, TypeError):
+            pass
+
+        # Try date prefix match (e.g. "2026-09-28" anywhere in the string)
+        today_str = today.isoformat()
+        if today_str in published:
+            return True
 
         return True  # unparseable → keep
 

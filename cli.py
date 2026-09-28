@@ -70,6 +70,8 @@ def register_cli(haber_parser, core: HaberKuratorCore):
                                   help="Filter by country (e.g. 'turkey', 'global')")
     auto_pub_parser.add_argument("--trending", "-t", action="store_true",
                                   help="🔥 Trending: cross-source coverage sıralaması (en çok kaynakta geçen haber önce). News kategorisinde avg 5.4 kaynak/küme (E-012).")
+    auto_pub_parser.add_argument("--today", action="store_true",
+                                  help="📅 Sadece bugünün haberleri (takvim günü filtresi)")
 
     subs.add_parser("sources", help="📡 List all configured news sources by credibility tier")
 
@@ -215,6 +217,7 @@ def register_cli(haber_parser, core: HaberKuratorCore):
             category = getattr(args, "category", None)
             country = getattr(args, "country", None)
             trending = getattr(args, "trending", False)
+            today_only = getattr(args, "today", False)
             from .writer_agent import WriterAgent
             agent = WriterAgent(core)
             # Enable Turkish content generation via LLM (falls back to template if unavailable)
@@ -223,10 +226,14 @@ def register_cli(haber_parser, core: HaberKuratorCore):
                 agent.set_llm(True)
             except ImportError:
                 pass
-            label = "🔥 trending " if trending else ""
+            labels = []
+            if trending: labels.append("🔥 trending")
+            if today_only: labels.append("📅 today")
+            label = " ".join(labels)
             with console.status(f"[bold cyan]🤖 Writer Agent publishing {limit} {label}news to Memos...[/bold cyan]"):
                 results = agent.auto_publish(max_articles=limit, category=category,
-                                             country=country, trending=trending)
+                                             country=country, trending=trending,
+                                             today_only=today_only)
             console.print(f"\n[bold green]📊 Writer Agent — RAPOR[/bold green]")
             console.print(f"   Yayınlanan: {results['published']}")
             console.print(f"   Atlanan:    {results['skipped']}")

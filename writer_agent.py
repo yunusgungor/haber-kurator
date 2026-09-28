@@ -376,16 +376,21 @@ class WriterAgent:
             return False
 
     def auto_publish(self, max_articles: int = 5, category: str = None,
-                     country: str = None, trending: bool = False) -> dict:
+                     country: str = None, trending: bool = False,
+                     today_only: bool = False) -> dict:
         """Full pipeline: fetch → verify → generate → publish.
 
         When trending=True: fetches popular/trending RSS feeds,
         uses 24h recency, and sorts by source_count (most-covered first).
+        When today_only=True: filters to current calendar day only.
         """
         import logging
         _logger = logging.getLogger(__name__)
-        _logger.info("📡 Haberler çekiliyor..." + (" (trending)" if trending else ""))
-        items = self.core.fetch_all_news(category, country, trending=trending)
+        opts = []
+        if trending: opts.append("trending")
+        if today_only: opts.append("today")
+        _logger.info("📡 Haberler çekiliyor..." + (f" ({'+'.join(opts)})" if opts else ""))
+        items = self.core.fetch_all_news(category, country, trending=trending, today_only=today_only)
         clusters = self.core.cluster_stories(items)
         _logger.info(f"✅ {len(items)} haber, {len(clusters)} küme\n")
 
