@@ -47,6 +47,7 @@ CONFIG = {
     "rss_delay": 0.3,                     # (unused since v3.2 — kept for backward compat)
     "rss_max_workers": 8,                 # Parallel RSS fetch pool size
     "rss_retry_delays": [1.0, 2.0, 4.0],  # Exponential backoff intervals (seconds)
+    "news_max_age_hours": 48,             # Drop items older than this (default: 2 days)
 }
 
 # ══════════════════════════════════════════════════════════════
@@ -1149,10 +1150,22 @@ class HaberKuratorCore:
             if not is_promo:
                 filtered.append(item)
 
+        # Filter out old news (recency check)
+        max_age = CONFIG.get("news_max_age_hours", 48)
+        fresh = []
+        stale_count = 0
+        for item in filtered:
+            if self._is_fresh(item.published, max_age_hours=max_age):
+                fresh.append(item)
+            else:
+                stale_count += 1
+
         logger.info(f"fetch_all_news: {len(all_items)} raw, {len(unique)} unique, "
-                    f"{len(unique) - len(filtered)} promo filtered, {len(filtered)} final. "
+                    f"{len(unique) - len(filtered)} promo filtered, "
+                    f"{stale_count} stale (> {max_age}h), "
+                    f"{len(fresh)} final. "
                     f"{len(errors)} fetch errors.")
-        return filtered
+        return fresh
 
     def _fetch_url_with_retry(self, url: str, headers: Dict[str, str],
                                timeout: int) -> Tuple[bytes, Any]:
@@ -1289,6 +1302,40 @@ class HaberKuratorCore:
             logger.debug(f"Network error for {feed_url}: {e}")
 
         return items
+
+    @staticmethod
+    def _is_fresh(published: str, max_age_hours: int = 48) -> bool:
+        """Check if a published-date string is within max_age_hours.
+
+        Parses RFC 2822 (RSS pubDate), ISO-8601 (Atom), Turkish/DMY formats.
+        Returns True if the item is fresh enough (or date is unparseable).
+        """
+        if not published or not published.strip():
+            return True  # no date → keep (better than dropping everything)
+
+        # Try RFC 2822 (e.g. "Mon, 25 Sep 2026 14:30:00 +0300")
+        try:
+            dt = datetime.strptime(published[:25], "%a, %d %b %Y %H:%M:%S")
+        except (ValueError, IndexError):
+            pass
+        else:
+            return (datetime.now() - dt).total_seconds() < max_age_hours * 3600
+
+        # Try ISO-8601 (e.g. "2026-09-25T14:30:00Z" or "2026-09-25T14:30:00+03:00")
+        try:
+            dt = datetime.fromisoformat(published.rstrip("Z"))
+        except (ValueError, TypeError):
+            pass
+        else:
+            return (datetime.now() - dt).total_seconds() < max_age_hours * 3600
+
+        # Try Turkish-style (e.g. "25 Eylül 2026 Pazartesi 14:30")
+        # Fallback: just check if mentioned year is current year
+        for y in range(datetime.now().year - 2, datetime.now().year):
+            if str(y) in published:
+                return False
+
+        return True  # unparseable → keep
 
     def _clean_html(self, text: str) -> str:
         """Strip HTML tags from text."""

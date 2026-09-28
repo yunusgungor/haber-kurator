@@ -11,6 +11,7 @@ import asyncio
 import unittest
 from unittest.mock import MagicMock, patch
 from pathlib import Path
+from datetime import datetime, timedelta
 
 # Add plugin directory to path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -1542,3 +1543,55 @@ def _make_mock_llm(return_text: str):
         return FakeResp(return_text)
     mock_llm.acomplete = fake_aco
     return mock_llm
+
+
+# ============================================================
+# TEST 9: _is_fresh recency filter
+# ============================================================
+
+def test_is_fresh_recent_rfc2822():
+    """RFC 2822 date within the window → fresh."""
+    dt = (datetime.now() - timedelta(hours=6)).strftime("%a, %d %b %Y %H:%M:%S +0000")
+    assert HaberKuratorCore._is_fresh(dt)
+
+
+def test_is_fresh_old_rfc2822():
+    """RFC 2822 date 10 days ago → stale."""
+    dt = (datetime.now() - timedelta(days=10)).strftime("%a, %d %b %Y %H:%M:%S +0000")
+    assert not HaberKuratorCore._is_fresh(dt)
+
+
+def test_is_fresh_recent_iso8601():
+    """ISO-8601 date within the window → fresh."""
+    dt = (datetime.now() - timedelta(hours=12)).isoformat()
+    assert HaberKuratorCore._is_fresh(dt)
+
+
+def test_is_fresh_old_iso8601():
+    """ISO-8601 date > 48h → stale."""
+    dt = (datetime.now() - timedelta(hours=72)).isoformat()
+    assert not HaberKuratorCore._is_fresh(dt)
+
+
+def test_is_fresh_zero_byte():
+    """Empty date → fresh (no date = keep)."""
+    assert HaberKuratorCore._is_fresh("")
+
+
+def test_is_fresh_old_year_in_text():
+    """Date with old year in string → stale."""
+    old = f"{datetime.now().year - 1} önceki bir haber"
+    assert not HaberKuratorCore._is_fresh(old)
+
+
+def test_is_fresh_current_year_in_text():
+    """Date with current year in string → fresh (no parseable date)."""
+    now = datetime.now()
+    assert HaberKuratorCore._is_fresh(str(now.year))
+
+
+def test_is_fresh_custom_max_age():
+    """Custom max_age_hours respects parameter."""
+    dt = (datetime.now() - timedelta(hours=36)).strftime("%a, %d %b %Y %H:%M:%S +0000")
+    assert not HaberKuratorCore._is_fresh(dt, max_age_hours=24)
+    assert HaberKuratorCore._is_fresh(dt, max_age_hours=48)
