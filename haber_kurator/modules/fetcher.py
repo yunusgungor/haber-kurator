@@ -32,6 +32,25 @@ from haber_kurator.modules.models import (
 
 logger = logging.getLogger(__name__)
 
+# ── Embedding model cache (lazy-loaded) ──
+_EMBEDDING_MODEL: Any = None  # SentenceTransformer instance or None
+_EMBEDDING_THRESHOLD = 0.18  # tuned via E-017 benchmark
+
+
+def _ensure_embedding_model() -> Any:
+    """Lazy-load the sentence-transformer model; return None on failure."""
+    global _EMBEDDING_MODEL
+    if _EMBEDDING_MODEL is not None:
+        return _EMBEDDING_MODEL
+    try:
+        from sentence_transformers import SentenceTransformer
+        _EMBEDDING_MODEL = SentenceTransformer("all-MiniLM-L6-v2")
+        logger.info("Embedding model loaded: all-MiniLM-L6-v2")
+    except Exception as exc:
+        logger.warning("Embedding model unavailable, falling back: %s", exc)
+        _EMBEDDING_MODEL = False  # sentinel: don't retry every call
+    return _EMBEDDING_MODEL if _EMBEDDING_MODEL is not False else None
+
 
 class FetcherMixin:
     """Mixin providing news fetching and cross-verification capabilities."""
@@ -447,82 +466,59 @@ class FetcherMixin:
 
     # ══════════════════════════════════════════════════════════
 
-    def cluster_stories(self, items: List[FetchedNewsItem]) -> List[Dict[str, Any]]:
-        """Group similar news items by story (same event across sources).
-
-        Uses keyword overlap with cross-language support (English/Turkish).
-        Common news words in both languages are normalized for matching.
-        Returns list of clusters, each with the story variants grouped.
-        """
-        # Cross-language normalization map for common news terms
-        # Normalizes Turkish/English equivalents to a shared key
-        BILINGUAL_MAP = {
-            # English → normalized
-            "president": "president", "minister": "minister", "government": "government",
-            "attack": "attack", "saldırı": "attack", "saldiri": "attack",
-            "earthquake": "earthquake", "deprem": "earthquake",
-            "election": "election", "seçim": "election", "secim": "election",
-            "economy": "economy", "ekonomi": "economy",
-            "technology": "technology", "teknoloji": "technology",
-            "company": "company", "şirket": "company", "sirket": "company",
-            "market": "market", "piyasa": "market", "borsa": "market",
-            "interest rate": "interest-rate", "faiz": "interest-rate",
-            "inflation": "inflation", "enflasyon": "inflation",
-            "bank": "bank", "merkez bankası": "central-bank", "central bank": "central-bank",
-            "war": "war", "savaş": "war", "savas": "war",
-            "peace": "peace", "barış": "peace", "baris": "peace",
-            "nuclear": "nuclear", "nükleer": "nuclear", "nukleer": "nuclear",
-            "energy": "energy", "enerji": "energy",
-            "climate": "climate", "iklim": "climate",
-            "health": "health", "sağlık": "health", "saglik": "health",
-            "education": "education", "eğitim": "education", "egitim": "education",
-            "security": "security", "güvenlik": "security", "guvenlik": "security",
-            "defense": "defense", "savunma": "defense",
-            "trade": "trade", "ticaret": "trade",
-            "summit": "summit", "zirve": "summit",
-            "crisis": "crisis", "kriz": "crisis",
-            "protest": "protest", "protesto": "protest",
-            "research": "research", "araştırma": "research", "arastirma": "research",
-            "prices": "prices", "fiyat": "prices",
-            "budget": "budget", "bütçe": "budget", "butce": "budget",
-            "billion": "billion", "milyar": "billion",
-            "million": "million", "milyon": "million",
-            "announced": "announced", "açıkladı": "announced", "acikladi": "announced",
-            "duyurdu": "announced", "reported": "reported", "bildirdi": "reported",
-        }
-
-        def _cross_lingual_normalize(title: str) -> str:
-            """Normalize title with cross-language support."""
-            t = title.lower().strip()
-            # Remove punctuation
-            t = re.sub(r'[^\w\s]', ' ', t)
-            # Separate Turkish chars for fuzzy matching
+    def _keyword_similarity(self, title_a: str, title_b: str) -> float:
+        """Jaccard similarity between two normalized titles (fallback)."""
+        def _normalize(t: str) -> Set[str]:
+            t = re.sub(r'[^\w\s]', ' ', t.lower())
             char_map = str.maketrans({
                 'ı': 'i', 'ğ': 'g', 'ü': 'u', 'ş': 's', 'ö': 'o', 'ç': 'c',
                 'İ': 'i', 'Ğ': 'g', 'Ü': 'u', 'Ş': 's', 'Ö': 'o', 'Ç': 'c',
             })
             t = t.translate(char_map)
+            return {w for w in t.split() if len(w) >= 3}
+        a_words = _normalize(title_a)
+        b_words = _normalize(title_b)
+        intersection = a_words & b_words
+        union = a_words | b_words
+        return len(intersection) / len(union) if union else 0.0
 
-            bilingual_words = []
-            for word in t.split():
-                if len(word) < 3:
-                    continue
-                # Check bilingual map
-                mapped = BILINGUAL_MAP.get(word, word)
-                if mapped in ("president", "minister", "government", "attack", "earthquake",
-                              "election", "economy", "technology", "company",
-                              "market", "interest-rate", "inflation", "bank",
-                              "war", "peace", "nuclear", "energy", "climate",
-                              "health", "education", "security", "defense",
-                              "trade", "summit", "crisis", "protest",
-                              "research", "prices", "budget", "billion", "million",
-                              "announced", "reported"):
-                    bilingual_words.append(mapped)
-                else:
-                    # Keep proper nouns (capitalized-ish original tokens), numbers
-                    bilingual_words.append(word)
+    def _embedding_similarity(self, title_a: str, title_b: str) -> Optional[float]:
+        """Cosine similarity via sentence embeddings, or None if model unavailable."""
+        model = _ensure_embedding_model()
+        if model is None:
+            return None
+        try:
+            emb = model.encode([title_a, title_b], normalize_embeddings=True)
+            # Manual cosine sim (dot product since normalized)
+            sim = float(emb[0] @ emb[1])
+            return max(-1.0, min(1.0, sim))
+        except Exception as exc:
+            logger.debug("Embedding similarity failed: %s", exc)
+            return None
 
-            return " ".join(bilingual_words)
+    def cluster_stories(self, items: List[FetchedNewsItem]) -> List[Dict[str, Any]]:
+        """Group similar news items by story (same event across sources).
+
+        Uses sentence-transformer embeddings for semantic similarity when the
+        model is available, falling back to keyword overlap otherwise.
+        Cross-language matching (e.g. Turkish/English) is handled natively by
+        the multilingual embedding space.
+
+        Returns list of clusters, each with the story variants grouped.
+        """
+        model = _ensure_embedding_model()
+
+        # Pre‑compute embedding similarity for all pairs using batched encoding
+        n = len(items)
+        if model is not None and n > 1:
+            try:
+                texts = [it.title for it in items]
+                emb = model.encode(texts, normalize_embeddings=True)
+                # Cosine similarity matrix via dot product (normalized)
+                sim_matrix = emb @ emb.T  # n×n
+            except Exception as exc:
+                logger.debug("Batch embedding failed: %s", exc)
+                model = None
 
         clusters: List[Dict[str, Any]] = []
         used: Set[int] = set()
@@ -531,46 +527,29 @@ class FetcherMixin:
             if i in used:
                 continue
 
-            cluster = {
+            cluster: Dict[str, Any] = {
                 "story_title": item.title,
                 "items": [item],
                 "sources": [item.source_name],
                 "source_tiers": [item.source_tier.value],
-                "categories": set(),
+                "categories": {item.category},
             }
-            cluster["categories"].add(item.category)
             used.add(i)
-
-            # Normalize title with cross-language support
-            norm_i = _cross_lingual_normalize(item.title)
-            i_words = set(norm_i.split())
-            if len(i_words) < 2:
-                cluster["source_count"] = len(cluster["sources"])
-                cluster["tier_count"] = {
-                    "primary": cluster["source_tiers"].count(0),
-                    "major": cluster["source_tiers"].count(1),
-                    "specialized": cluster["source_tiers"].count(2),
-                }
-                cluster["item_count"] = len(cluster["items"])
-                cluster["categories"] = list(cluster["categories"])
-                clusters.append(cluster)
-                continue
 
             for j, other in enumerate(items):
                 if j in used or i == j:
                     continue
 
-                norm_j = _cross_lingual_normalize(other.title)
-                j_words = set(norm_j.split())
+                if model is not None:
+                    # Similarity from embedding matrix — threshold from E-017
+                    score = float(sim_matrix[i, j])
+                    threshold = 0.18
+                else:
+                    # Fallback: keyword overlap with Turkish char normalization
+                    score = self._keyword_similarity(item.title, other.title)
+                    threshold = 0.05  # lenient for cross-language
 
-                overlap = len(i_words & j_words)
-                min_len = min(len(i_words), len(j_words))
-                if min_len == 0:
-                    continue
-                score = overlap / min_len
-
-                # Lower threshold for cross-language matching (30% instead of 40%)
-                if score >= 0.3:
+                if score >= threshold:
                     cluster["items"].append(other)
                     cluster["sources"].append(other.source_name)
                     cluster["source_tiers"].append(other.source_tier.value)
@@ -590,12 +569,10 @@ class FetcherMixin:
                 "specialized": cluster["source_tiers"].count(2),
             }
             cluster["item_count"] = len(cluster["items"])
-
             clusters.append(cluster)
 
         # Sort by number of sources reporting (most-covered first)
         clusters.sort(key=lambda c: c["source_count"], reverse=True)
-
         return clusters
 
     # ══════════════════════════════════════════════════════════

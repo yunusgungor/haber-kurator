@@ -1,0 +1,78 @@
+{
+  "pairs": [
+    {
+      "title_a": "Fed keeps interest rates steady at 4.5%, signals cautious approach to 2025",
+      "title_b": "Fed faiz oranını %4.5'te sabit tuttu, 2025'e temkinli sinyal",
+      "expected": true,
+      "jaccard": 0.1333,
+      "embedding_similarity": 0.2745
+    },
+    {
+      "title_a": "Powerful 7.1 magnitude earthquake strikes Japan's Ishikawa prefecture",
+      "title_b": "Japonya'da 7.1 büyüklüğünde deprem: Ishikawa prefektörlüğü sarsıldı",
+      "expected": true,
+      "jaccard": 0.0833,
+      "embedding_similarity": 0.2663
+    },
+    {
+      "title_a": "SpaceX successfully launches Starship on fifth test flight, booster caught by tower",
+      "title_b": "SpaceX, Starship'i beşinci test uçuşunda başarıyla fırlattı, güçlendirici yakalandı",
+      "expected": true,
+      "jaccard": 0.1875,
+      "embedding_similarity": 0.4005
+    },
+    {
+      "title_a": "US Senate passes $1.2 trillion infrastructure bill with bipartisan support",
+      "title_b": "ABD Senatosu 1.2 trilyon dolarlık altyapı yasasını iki partili destekle geçirdi",
+      "expected": true,
+      "jaccard": 0.0,
+      "embedding_similarity": -0.0052
+    },
+    {
+      "title_a": "Apple unveils iPhone 16 Pro with AI-powered features, A18 chip",
+      "title_b": "Apple, yapay zeka özellikleri ve A18 çipiyle iPhone 16 Pro'yu tanıttı",
+      "expected": true,
+      "jaccard": 0.2857,
+      "embedding_similarity": 0.6117
+    },
+    {
+      "title_a": "Manchester City wins Premier League title after dramatic final day",
+      "title_b": "NASA's Perseverance rover discovers ancient microbial fossils on Mars",
+      "expected": false,
+      "jaccard": 0.0,
+      "embedding_similarity": 0.0318
+    },
+    {
+      "title_a": "Bitcoin price surges past $100,000 for the first time in history",
+      "title_b": "WHO declares new variant of concern as COVID-19 cases rise globally",
+      "expected": false,
+      "jaccard": 0.0,
+      "embedding_similarity": 0.1597
+    },
+    {
+      "title_a": "OPEC+ agrees to cut oil production by 2 million barrels per day",
+      "title_b": "Real Madrid signs record-breaking sponsorship deal with tech giant",
+      "expected": false,
+      "jaccard": 0.0,
+      "embedding_similarity": 0.0799
+    },
+    {
+      "title_a": "European Central Bank raises interest rates to combat rising inflation",
+      "title_b": "Netflix launches ad-supported tier, adds 5 million new subscribers",
+      "expected": false,
+      "jaccard": 0.0,
+      "embedding_similarity": 0.1607
+    },
+    {
+      "title_a": "Germany announces $50 billion investment in renewable energy infrastructure",
+      "title_b": "Los Angeles Lakers win NBA championship in five-game series victory",
+      "expected": false,
+      "jaccard": 0.0,
+      "embedding_similarity": -0.0312
+    }
+  ],
+  "best_jaccard_threshold": 0.05,
+  "best_jaccard_accuracy": 0.9,
+  "best_embedding_threshold": 0.18,
+  "best_embedding_accuracy": 0.9
+}
