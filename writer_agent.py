@@ -186,18 +186,27 @@ class WriterAgent:
         best_url = cluster.get("best_url", "")
         title = cluster["story_title"]
 
+        # ── Build [Kaynak] from REAL item data ONCE (used by both LLM and template paths) ──
+        seen = set()
+        kaynak_lines = []
+        for i in items:
+            if i.url not in seen and i.url:
+                seen.add(i.url)
+                kaynak_lines.append(f"- {i.source_name}: {i.url}")
+        if best_url and best_url not in seen:
+            kaynak_lines.append(f"- Kaynak: {best_url}")
+        kaynak_text = "\n".join(kaynak_lines[:8])  # max 8 sources
+
         # ── Try LLM-based content first ──────────────────────
         llm_result = self._generate_turkish_summary(cluster)
 
         if llm_result:
-            # Extract sections from LLM output
+            # Extract ONLY Özet and Detaylar from LLM output
             ozet_text = _extract_section(llm_result, "[Özet]", "[Detaylar]")
             detaylar_text = _extract_section(llm_result, "[Detaylar]", "[Kaynak]")
-            kaynak_text = _extract_section(llm_result, "[Kaynak]", None)
             return self._render_article(ozet_text or title,
                                         detaylar_text or "",
-                                        kaynak_text or "",
-                                        sources, items, best_url)
+                                        kaynak_text)
 
         # ── Template fallback ────────────────────────────────
         tr_title = self._translate_headline(title)
@@ -290,19 +299,17 @@ class WriterAgent:
         else:
             detay_lines.append("- Haber güvenilir kaynaklardan doğrulandı.")
         detaylar_text = "\n".join(detay_lines)
-        kaynak_text = "\n".join(f"- {i.source_name}: {i.url}" for i in items[:5])
 
-        return self._render_article(ozet_text, detaylar_text, kaynak_text,
-                                    sources, items, best_url)
+        return self._render_article(ozet_text, detaylar_text, kaynak_text)
 
     # ──────────────────────────────────────────────────────────
     # CANONICAL RENDERER — ensures every Memos post uses the
     # exact same structure regardless of generation path.
     # ──────────────────────────────────────────────────────────
 
-    def _render_article(self, ozet_text: str, detaylar_text: str,
-                        kaynak_text: str, sources: list,
-                        items: list, best_url: str) -> str:
+    @staticmethod
+    def _render_article(ozet_text: str, detaylar_text: str,
+                        kaynak_text: str) -> str:
         """Wrap extracted sections into the canonical Memos format."""
         parts = ["[Özet]", ozet_text, "", "[Detaylar]", detaylar_text, "",
                  "[Kaynak]", kaynak_text, "", "#Haber #Gündem"]
