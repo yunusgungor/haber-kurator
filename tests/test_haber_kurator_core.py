@@ -35,7 +35,7 @@ class TestConstants:
         assert VERSION == "3.1.0"
 
     def test_state_count(self):
-        assert len(STATE_LIFECYCLE) == 8
+        assert len(STATE_LIFECYCLE) == 5
 
     def test_state_order(self):
         assert STATE_LIFECYCLE[0] == "captured"
@@ -259,7 +259,7 @@ class TestStateMachine:
         assert core.get_state("nonexistent") == "unknown"
 
     def test_update_nonexistent(self, core):
-        result = core.update_state("nonexistent-slug", "fact_checking")
+        result = core.update_state("nonexistent-slug", "verified")
         assert "❌" in result
 
     def test_get_next_actions(self, core):
@@ -292,7 +292,7 @@ class TestStateMachine:
     def test_state_transition_happy_path(self, core):
         """Full lifecycle: cross_verified → published → archived"""
         slug = self._create_test_run(core)
-        assert core.get_state(slug) == "cross_verified"
+        assert core.get_state(slug) == "verified"
         path = ["published", "archived"]
         for state in path:
             r = core.update_state(slug, state)
@@ -300,10 +300,10 @@ class TestStateMachine:
         assert core.get_state(slug) == "archived"
 
     def test_state_invalid_transition_denied(self, core):
-        """cross_verified → fact_checking (going backward) should be denied"""
+        """verified → archived (skip published) should be denied"""
         slug = self._create_test_run(core)
-        assert core.get_state(slug) == "cross_verified"
-        r = core.update_state(slug, "fact_checking")
+        assert core.get_state(slug) == "verified"
+        r = core.update_state(slug, "archived")
         assert "❌" in r, f"Invalid transition should be denied: {r}"
 
     def test_state_force_bypasses_validation(self, core):
@@ -338,15 +338,15 @@ class TestStateMachine:
     def test_state_cross_verified_to_correction_needed(self, core):
         """cross_verified → correction_needed (pre-publish error catch)"""
         slug = self._create_test_run(core)
-        r = core.update_state(slug, "correction_needed")
+        r = core.update_state(slug, "corrected")
         assert "✅" in r, f"cross_verified→correction_needed should work: {r}"
 
     def test_state_fact_checking_to_correction_needed(self, core):
         """fact_checking → correction_needed — start from captured"""
         slug = self._create_test_run(core)
         core.update_state(slug, "captured", force=True)
-        core.update_state(slug, "fact_checking")
-        r = core.update_state(slug, "correction_needed")
+        core.update_state(slug, "verified")
+        r = core.update_state(slug, "corrected")
         assert "✅" in r, f"fact_checking→correction_needed should work: {r}"
 
     def test_state_archived_is_terminal(self, core):
@@ -354,7 +354,7 @@ class TestStateMachine:
         slug = self._create_test_run(core)
         core.update_state(slug, "published")
         core.update_state(slug, "archived")
-        for target in ("captured", "fact_checking", "published"):
+        for target in ("captured", "verified", "published"):
             r = core.update_state(slug, target)
             assert "❌" in r, f"archived→{target} should be denied: {r}"
 
@@ -386,23 +386,22 @@ class TestStateMachine:
         assert core.get_route("nonexistent") == "VERIFIED"
 
     def test_state_correction_full_cycle(self, core):
-        """published → correction_needed → corrected → archived"""
+        """published → corrected → published → archived"""
         slug = self._create_test_run(core)
         core.update_state(slug, "published")
-        core.update_state(slug, "correction_needed")
-        assert core.get_state(slug) == "correction_needed"
         core.update_state(slug, "corrected")
         assert core.get_state(slug) == "corrected"
+        core.update_state(slug, "published")
+        assert core.get_state(slug) == "published"
         core.update_state(slug, "archived")
         assert core.get_state(slug) == "archived"
 
     def test_state_retraction_flow(self, core):
-        """published → correction_needed → retracted → archived"""
+        """published → corrected (retraction) → archived"""
         slug = self._create_test_run(core)
         core.update_state(slug, "published")
-        core.update_state(slug, "correction_needed")
-        core.update_state(slug, "retracted")
-        assert core.get_state(slug) == "retracted"
+        core.update_state(slug, "corrected")
+        assert core.get_state(slug) == "corrected"
         core.update_state(slug, "archived")
         assert core.get_state(slug) == "archived"
 
@@ -665,8 +664,8 @@ class TestNewsVerification:
         r = core.create_news_run(cluster)
         slug = r["slug"]
         # Advance to published state
-        core.update_state(slug, "fact_checking")
-        core.update_state(slug, "cross_verified")
+        core.update_state(slug, "verified")
+        core.update_state(slug, "verified")
         core.update_state(slug, "published")
         assert core.get_state(slug) == "published"
 
@@ -689,7 +688,7 @@ class TestNewsVerification:
         }
         r = core.create_news_run(cluster)
         slug = r["slug"]
-        for s in ["fact_checking", "cross_verified", "published"]:
+        for s in ["verified", "verified", "published"]:
             core.update_state(slug, s)
         result = core.issue_correction(slug, "Wrong data", "Correct: $42")
         assert "✅" in result
@@ -715,12 +714,12 @@ class TestNewsVerification:
         }
         r = core.create_news_run(cluster)
         slug = r["slug"]
-        for s in ["fact_checking", "cross_verified", "published"]:
+        for s in ["verified", "verified", "published"]:
             core.update_state(slug, s)
-        core.update_state(slug, "correction_needed")
+        core.update_state(slug, "corrected")
         result = core.issue_correction(slug, "False story", "", retract=True)
         assert "✅" in result
-        assert core.get_state(slug) == "retracted"
+        assert core.get_state(slug) == "corrected"
 
 
 # ============================================================
@@ -1369,7 +1368,7 @@ class TestLLMFunctions:
             slug = self._create_test_run_for_llm(core)
             mock_llm = _make_mock_llm("# Brief\n\nTest brief content for news.")
             result = await core.generate_brief(slug, llm=mock_llm)
-            assert result["status"] == "cross_verified"
+            assert result["status"] == "verified"
             assert result["length"] > 0
             brief_path = core.active_runs / slug / "brief.md"
             assert brief_path.exists()
@@ -1394,7 +1393,7 @@ class TestLLMFunctions:
             slug = self._create_test_run_for_llm(core)
             mock_llm = _make_mock_llm("# Brief\n\nExtra context test.")
             result = await core.generate_brief(slug, llm=mock_llm, extra_context="Extra context info")
-            assert result["status"] == "cross_verified"
+            assert result["status"] == "verified"
         asyncio.run(_test())
 
     def test_generate_brief_llm_error(self, core):
@@ -1414,7 +1413,7 @@ class TestLLMFunctions:
             slug = self._create_test_run_for_llm(core)
             mock_llm = _make_mock_llm("```markdown\n# Clean Brief\n\nContent.\n```")
             result = await core.generate_brief(slug, llm=mock_llm)
-            assert result["status"] == "cross_verified"
+            assert result["status"] == "verified"
             brief_path = core.active_runs / slug / "brief.md"
             content = brief_path.read_text(encoding="utf-8")
             assert "```" not in content

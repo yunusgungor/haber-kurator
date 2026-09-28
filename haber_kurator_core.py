@@ -753,29 +753,33 @@ NEWS_SOURCES_EMBEDDED: Dict[str, NewsSource] = {
 }
 
 # ══════════════════════════════════════════════════════════════
-# STATE MACHINE — 8 States (News Only)
+# STATE MACHINE — 5 States (News Only)
 # ══════════════════════════════════════════════════════════════
 
 STATE_LIFECYCLE = [
     "captured",           # News item enters the system
-    "fact_checking",      # Cross-verification in progress
-    "cross_verified",     # Claims verified against sources
+    "verified",           # Cross-verified against sources (was: fact_checking → cross_verified)
     "published",          # Published to Memos
-    "correction_needed",  # Error detected post-publication
-    "corrected",          # Correction issued
-    "retracted",          # Story retracted
-    "archived",
+    "corrected",          # Correction issued (was: correction_needed → corrected)
+    "archived",           # Final state
 ]
 
 STATE_TRANSITIONS = {
-    "captured":           ["fact_checking"],
-    "fact_checking":      ["cross_verified", "captured", "correction_needed"],
-    "cross_verified":     ["captured", "published", "correction_needed"],
-    "published":          ["correction_needed", "corrected", "archived"],
-    "correction_needed":  ["corrected", "retracted"],
+    "captured":           ["verified"],
+    "verified":           ["captured", "verified", "published", "corrected"],
+    "published":          ["corrected", "archived"],
     "corrected":          ["published", "archived"],
-    "retracted":          ["archived"],
     "archived":           [],
+}
+
+# Legacy state → new state mapping for backward-compat migration
+STATE_ALIAS_MAP = {
+    "fact_checking":      "verified",
+    "cross_verified":     "verified",
+    "cross_verified":     "verified",   # intentional duplicate for docs
+    "correction_needed":  "corrected",
+    "corrected":          "corrected",
+    "retracted":          "corrected",
 }
 
 ROUTE_VERIFIED = "VERIFIED"
@@ -1084,7 +1088,7 @@ class HaberKuratorCore:
                     self._state_cache[slug] = RunState(
                         slug=d["slug"],
                         title=d.get("title", ""),
-                        state=d.get("state", "captured"),
+                        state=STATE_ALIAS_MAP.get(d.get("state", "captured"), d.get("state", "captured")),
                         route=d.get("route", "VERIFIED"),
                         created=d.get("created", ""),
                         updated=d.get("updated", ""),
@@ -1108,7 +1112,7 @@ class HaberKuratorCore:
                 self._state_cache[row["slug"]] = RunState(
                     slug=row["slug"],
                     title=row["title"],
-                    state=row["state"],
+                    state=STATE_ALIAS_MAP.get(row["state"], row["state"]),
                     route=row["route"],
                     created=row["created"],
                     updated=row["updated"],
@@ -2202,7 +2206,7 @@ class HaberKuratorCore:
 
         # Step 2: Create haber-object.md
         route = "VERIFIED" if verification.is_safe_to_publish else "REWRITE"
-        initial_state = "cross_verified" if verification.is_safe_to_publish else "captured"
+        initial_state = "verified" if verification.is_safe_to_publish else "captured"
 
         obj = f"""# Haber Nesnesi — {slug}
 
@@ -2319,14 +2323,16 @@ class HaberKuratorCore:
 
     def update_state(self, slug: str, new_state: str,
                      force: bool = False, route: str = "VERIFIED") -> str:
-        """Update state with 8-state lifecycle validation.
+        """Update state with 5-state lifecycle validation.
 
         Args:
             slug: Run slug
-            new_state: Target state from STATE_LIFECYCLE
+            new_state: Target state from STATE_LIFECYCLE (legacy names auto-migrated)
             force: Skip transition validation (used by sync_state for FS recovery)
             route: Route classification — VERIFIED, HIGH_SLOP, or ESCALATED
         """
+        # Migrate legacy state names
+        new_state = STATE_ALIAS_MAP.get(new_state, new_state)
         logger.info("update_state: slug=%s, new_state=%s, force=%s", slug, new_state, force)
 
         if new_state not in STATE_LIFECYCLE:
@@ -2436,13 +2442,13 @@ class HaberKuratorCore:
         if (run_path / "correction.md").exists():
             content = (run_path / "correction.md").read_text(encoding="utf-8")
             if "## Retraction" in content or "GERİ ÇEKME" in content:
-                state = "retracted"
+                state = "corrected"
             elif "## Correction" in content or "DÜZELTME" in content:
                 state = "corrected"
             else:
-                state = "correction_needed"
+                state = "corrected"
         elif (run_path / "fact-check-report.md").exists():
-            state = "cross_verified"
+            state = "verified"
         else:
             state = "captured"
 
@@ -2462,6 +2468,8 @@ class HaberKuratorCore:
         content = obj.read_text(encoding="utf-8")
         m = re.search(r'(?i)(?:status|state)\*{0,2}:\*{0,2}\s*(\w+)', content)
         state = m.group(1) if m else "unknown"
+        # Migrate legacy state names from disk
+        state = STATE_ALIAS_MAP.get(state, state)
         if state != "unknown":
             rs = RunState(slug=slug, state=state)
             for field, key in [("Route", "route"), ("Title", "title")]:
@@ -2489,25 +2497,16 @@ class HaberKuratorCore:
         """Return suggested next actions based on current state."""
         state = self.get_state(slug)
         guide = {
-            "captured":          ["Verify news: update_state → fact_checking",
-                                  "Or cross-check against sources"],
-            "fact_checking":     ["Wait for cross-verification to complete",
-                                  "Check fact-check-report.md",
-                                  "If source insufficient: return to captured",
-                                  "If error found: correct via correction_needed"],
-            "cross_verified":    ["Publish to Memos: update_state → published",
-                                  "If error found pre-publish: correction_needed",
+            "captured":          ["Verify news: update_state → verified"],
+            "verified":          ["Publish to Memos: update_state → published",
+                                  "If error found: correct via corrected",
                                   "If needs rework: return to captured"],
             "published":         ["Monitor for corrections needed",
-                                  "Issue correction: update_state → correction_needed",
-                                  "Direct correction: update_state → corrected",
+                                  "Issue correction: update_state → corrected",
                                   "Archive if final: update_state → archived"],
-            "correction_needed": ["Write correction.md with accurate info",
-                                  "Publish correction: update_state → corrected",
-                                  "If unfixable: update_state → retracted"],
             "corrected":         ["Correction published.",
+                                  "If re-publish needed: update_state → published",
                                   "Archive if done: update_state → archived"],
-            "retracted":         ["Story retracted. Archive: update_state → archived"],
             "archived":          ["Run archived. Review if needed: /haber audit"],
         }
         return guide.get(state, ["No specific next actions for this state."])
@@ -2667,12 +2666,12 @@ Return ONLY the markdown brief. No extra commentary."""
 
             brief_path = run_path / "brief.md"
             brief_path.write_text(text, encoding="utf-8")
-            # Brief hazırlandı — state zaten cross_verified ise koru, değilse geç
+            # Brief ready — advance to verified if not already past that stage
             current = self.get_state(slug)
-            if current not in ("cross_verified", "published", "correction_needed"):
-                self.update_state(slug, "cross_verified")
+            if current not in ("verified", "published", "corrected"):
+                self.update_state(slug, "verified")
 
-            return {"slug": slug, "status": "cross_verified", "length": len(text)}
+            return {"slug": slug, "status": "verified", "length": len(text)}
 
         except Exception as e:
             return {"error": f"Brief generation failed: {str(e)}"}
@@ -3184,7 +3183,7 @@ CRITICAL RULES:
                 return f"❌ Run {slug} not found in active or archive."
 
         current_state = self.get_state(slug)
-        if current_state not in ("published", "correction_needed"):
+        if current_state not in ("published", "corrected"):
             return f"❌ Cannot issue correction in state '{current_state}'. Must be published first."
 
         # Write correction file
@@ -3225,11 +3224,9 @@ The error has been corrected. We maintain our commitment to factual accuracy.
 
         (run_path / "correction.md").write_text(corr_content, encoding="utf-8")
 
-        # Update state
-        new_state = "retracted" if retract else "corrected"
-        self.update_state(slug, new_state, force=True)
-
-        return f"✅ {'Retraction' if retract else 'Correction'} issued for {slug}. State: {new_state}."
+        # Update state — both correction and retraction map to corrected
+        self.update_state(slug, "corrected", force=True)
+        return f"✅ {'Retraction' if retract else 'Correction'} issued for {slug}. State: corrected."
 
     def check_correction_needed(self, slug: str) -> str:
         """Check if a published run has known issues requiring correction."""
