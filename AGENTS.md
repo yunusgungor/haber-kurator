@@ -149,6 +149,28 @@ slug = re.sub(r'[^a-z0-9\-_]', '-', slug.lower())[:50]
 slug = re.sub(r'-+', '-', slug).strip('-')
 ```
 
+### 4. Datetime Timezone Mismatch — `_is_fresh()` (2026-09-28)
+**Sorun:** `fetch_news`/`fetch_all_news` "can't subtract offset-naive and offset-aware datetimes" hatası veriyordu.
+
+**Sebep:** `fromisoformat()` timezone-aware datetime döndürüyor, `datetime.now()` ise naive. İkisi çıkarılamaz.
+
+**Düzeltme:** Karşılaştırma öncesi her iki datetime `timezone.utc`'ye normalize edildi:
+
+```python
+now = datetime.now(timezone.utc)
+dt = datetime.fromisoformat(published.rstrip("Z"))
+if dt.tzinfo is None:
+    dt = dt.replace(tzinfo=timezone.utc)
+return (now - dt).total_seconds() < max_age_hours * 3600
+```
+
+### 5. get_state None-Slug Crash (2026-09-28)
+**Sorun:** `get_state` action'ı slug parametresi olmadan çağırılınca `PosixPath / NoneType` hatası veriyordu.
+
+**Sebep:** `self.active_runs / None` → `unsupported operand type(s) for /: 'PosixPath' and 'NoneType'`
+
+**Düzeltme:** Slug validation eklendi — slug yoksa hata mesajı dönülüyor:
+
 ---
 
 ## Mevcut Durum
