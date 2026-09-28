@@ -29,6 +29,7 @@ except ImportError:
 from haber_kurator.modules.state_machine import StateMachineMixin
 from haber_kurator.modules.fetcher import FetcherMixin
 from haber_kurator.modules.scanner import ScannerMixin
+from haber_kurator.modules.writer import WriterMixin
 
 from haber_kurator.modules.models import (
     VERSION, CONFIG, NEWS_SOURCES,
@@ -93,7 +94,7 @@ FULL_SLOP_BONUS = [
     r"could potentially mean", r"might indicate that", r"may suggest that",
     r"could be a sign", r"raises questions about",
 ]
-class HaberKuratorCore(ScannerMixin, FetcherMixin, StateMachineMixin):
+class HaberKuratorCore(WriterMixin, ScannerMixin, FetcherMixin, StateMachineMixin):
     """Haber Kuratör v3.1.0 — News Verification Engine.
 
     Transforms raw news from world-leading sources into verified,
