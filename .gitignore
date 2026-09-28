@@ -27,8 +27,14 @@ Thumbs.db
 ## Loglar
 *.log
 
+## Python / uv
+__pycache__/
+*.pyc
+.state_cache
+
+## Virtual environments
+.venv/
+venv/
+
 ## Ortam değişkenleri
 .env
-
-__pycache__
-.state_cache

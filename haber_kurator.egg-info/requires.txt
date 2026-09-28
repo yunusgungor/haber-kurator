@@ -1,0 +1,11 @@
+numpy>=2.0
+python-dotenv>=1.0
+requests>=2.32
+requests-oauthlib>=2.0
+scikit-learn>=1.5
+scipy>=1.14
+sentence-transformers>=3.0
+torch>=2.0
+
+[dev]
+pytest>=9.0

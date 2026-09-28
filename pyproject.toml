@@ -1,0 +1,25 @@
+[project]
+name = "haber-kurator"
+version = "2.4.0"
+description = "AI-Augmented News Production System — Haber Kuratör Plugin for Hermes Agent"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+
+dependencies = [
+    "numpy>=2.0",
+    "python-dotenv>=1.0",
+    "requests>=2.32",
+    "requests-oauthlib>=2.0",
+    "scikit-learn>=1.5",
+    "scipy>=1.14",
+    "sentence-transformers>=3.0",
+    "torch>=2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=9.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["haber_kurator*"]
