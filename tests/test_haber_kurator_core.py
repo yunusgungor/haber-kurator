@@ -7,6 +7,7 @@ hallucination, correction, state machine, edge cases.
 import sys
 import json
 import urllib.error
+import asyncio
 import unittest
 from unittest.mock import MagicMock, patch
 from pathlib import Path
@@ -1312,3 +1313,232 @@ class TestSearchNews:
             assert "categories" in r["cluster"]
             cats = r["cluster"]["categories"]
             assert isinstance(cats, list)
+
+    def _create_test_run_for_llm(self, core) -> str:
+        """Helper: create a run with all files an LLM function needs."""
+        from haber_kurator_core import FetchedNewsItem, SourceTier
+        cluster = {
+            "story_title": "LLM Test News",
+            "items": [
+                FetchedNewsItem(title="Test", url="https://r.com", source_name="Reuters",
+                    source_tier=SourceTier.PRIMARY, summary="Market update", category="news"),
+                FetchedNewsItem(title="Test2", url="https://ap.com", source_name="Associated Press (AP)",
+                    source_tier=SourceTier.PRIMARY, summary="Market update", category="news"),
+            ],
+            "sources": ["Reuters", "Associated Press (AP)"],
+            "source_tiers": [0, 0],
+            "source_count": 2,
+            "tier_count": {"primary": 2, "major": 0, "specialized": 0},
+            "categories": ["news"],
+            "best_url": "https://r.com",
+        }
+        r = core.create_news_run(cluster)
+        return r["slug"]
+
+    def _make_mock_llm(self, return_text: str):
+        """Helper: create a mock LLM object with async acomplete."""
+        import asyncio
+        mock_llm = MagicMock()
+
+        class FakeResponse:
+            def __init__(self, text):
+                self.text = text
+
+        async def fake_acomplete(messages):
+            await asyncio.sleep(0.001)
+            return FakeResponse(return_text)
+
+        mock_llm.acomplete = fake_acomplete
+        return mock_llm
+
+
+# ============================================================
+# TEST 8: LLM Functions — generate_brief, generate_draft, run_verifier
+# ============================================================
+
+class TestLLMFunctions:
+    """Mock-LLM tests for async LLM-powered pipeline functions."""
+
+    @pytest.fixture
+    def core(self, tmp_path):
+        return HaberKuratorCore(tmp_path)
+
+    # ─── generate_brief ───────────────────────────────────────
+
+    def test_generate_brief_success(self, core):
+        async def _test():
+            slug = self._create_test_run_for_llm(core)
+            mock_llm = _make_mock_llm("# Brief\n\nTest brief content for news.")
+            result = await core.generate_brief(slug, llm=mock_llm)
+            assert result["status"] == "cross_verified"
+            assert result["length"] > 0
+            brief_path = core.active_runs / slug / "brief.md"
+            assert brief_path.exists()
+            assert "Test brief content" in brief_path.read_text(encoding="utf-8")
+        asyncio.run(_test())
+
+    def test_generate_brief_invalid_slug(self, core):
+        async def _test():
+            result = await core.generate_brief("nonexistent-slug")
+            assert "error" in result
+        asyncio.run(_test())
+
+    def test_generate_brief_fallback_no_llm(self, core):
+        async def _test():
+            slug = self._create_test_run_for_llm(core)
+            result = await core.generate_brief(slug)
+            assert "error" in result
+        asyncio.run(_test())
+
+    def test_generate_brief_with_extra_context(self, core):
+        async def _test():
+            slug = self._create_test_run_for_llm(core)
+            mock_llm = _make_mock_llm("# Brief\n\nExtra context test.")
+            result = await core.generate_brief(slug, llm=mock_llm, extra_context="Extra context info")
+            assert result["status"] == "cross_verified"
+        asyncio.run(_test())
+
+    def test_generate_brief_llm_error(self, core):
+        async def _test():
+            slug = self._create_test_run_for_llm(core)
+            mock_llm = MagicMock()
+            async def fail(*a, **kw):
+                raise ValueError("LLM API error")
+            mock_llm.acomplete = fail
+            result = await core.generate_brief(slug, llm=mock_llm)
+            assert "error" in result
+            assert "LLM API error" in result["error"]
+        asyncio.run(_test())
+
+    def test_generate_brief_strips_triple_backticks(self, core):
+        async def _test():
+            slug = self._create_test_run_for_llm(core)
+            mock_llm = _make_mock_llm("```markdown\n# Clean Brief\n\nContent.\n```")
+            result = await core.generate_brief(slug, llm=mock_llm)
+            assert result["status"] == "cross_verified"
+            brief_path = core.active_runs / slug / "brief.md"
+            content = brief_path.read_text(encoding="utf-8")
+            assert "```" not in content
+            assert content.startswith("# Clean Brief")
+        asyncio.run(_test())
+
+    # ─── generate_draft ───────────────────────────────────────
+
+    def test_generate_draft_success(self, core):
+        async def _test():
+            slug = self._create_test_run_for_llm(core)
+            brief_llm = _make_mock_llm("# Brief\n\nSource: Reuters reports market update.")
+            await core.generate_brief(slug, llm=brief_llm)
+            draft_llm = _make_mock_llm("# Draft\n\n[Özet] - [Detaylar] - [Kaynak]")
+            result = await core.generate_draft(slug, llm=draft_llm)
+            assert result["status"] == "drafted"
+            draft_path = core.active_runs / slug / "draft-package.md"
+            assert draft_path.exists()
+        asyncio.run(_test())
+
+    def test_generate_draft_invalid_slug(self, core):
+        async def _test():
+            result = await core.generate_draft("nonexistent")
+            assert "error" in result
+        asyncio.run(_test())
+
+    def test_generate_draft_no_brief(self, core):
+        async def _test():
+            slug = self._create_test_run_for_llm(core)
+            result = await core.generate_draft(slug)
+            assert "error" in result
+            assert "No brief.md" in result["error"]
+        asyncio.run(_test())
+
+    def test_generate_draft_fallback_no_llm(self, core):
+        async def _test():
+            slug = self._create_test_run_for_llm(core)
+            mock_llm = _make_mock_llm("# Brief\n\nTest")
+            await core.generate_brief(slug, llm=mock_llm)
+            result = await core.generate_draft(slug)
+            assert "error" in result
+        asyncio.run(_test())
+
+    # ─── run_verifier ─────────────────────────────────────────
+
+    def test_run_verifier_success(self, core):
+        async def _test():
+            slug = self._create_test_run_for_llm(core)
+            await core.generate_brief(slug, llm=_make_mock_llm("# Brief\n\nSource: Reuters."))
+            await core.generate_draft(slug, llm=_make_mock_llm("# Draft\n\nProper news content."))
+            verifier_llm = _make_mock_llm("## VERDICT\n- [APPROVE]")
+            result = await core.run_verifier(slug, llm=verifier_llm)
+            assert result["status"] == "verified"
+            report_path = core.active_runs / slug / "verifier-report.md"
+            assert report_path.exists()
+        asyncio.run(_test())
+
+    def test_run_verifier_invalid_slug(self, core):
+        async def _test():
+            result = await core.run_verifier("nonexistent")
+            assert "error" in result
+        asyncio.run(_test())
+
+    def test_run_verifier_no_draft(self, core):
+        async def _test():
+            slug = self._create_test_run_for_llm(core)
+            result = await core.run_verifier(slug)
+            assert "error" in result
+            assert "No draft-package.md" in result["error"]
+        asyncio.run(_test())
+
+    def test_run_verifier_strips_backticks(self, core):
+        async def _test():
+            slug = self._create_test_run_for_llm(core)
+            await core.generate_brief(slug, llm=_make_mock_llm("# Brief\n\nSource."))
+            await core.generate_draft(slug, llm=_make_mock_llm("# Draft\n\nContent."))
+            verifier_llm = _make_mock_llm("```markdown\n## VERDICT\n- [APPROVE]\n```")
+            result = await core.run_verifier(slug, llm=verifier_llm)
+            assert result["status"] == "verified"
+            report = (core.active_runs / slug / "verifier-report.md").read_text(encoding="utf-8")
+            assert "```" not in report
+        asyncio.run(_test())
+
+    def test_run_verifier_llm_error(self, core):
+        async def _test():
+            slug = self._create_test_run_for_llm(core)
+            await core.generate_brief(slug, llm=_make_mock_llm("# Brief"))
+            await core.generate_draft(slug, llm=_make_mock_llm("# Draft"))
+            mock_llm = MagicMock()
+            async def fail(*a, **kw):
+                raise ConnectionError("API timeout")
+            mock_llm.acomplete = fail
+            result = await core.run_verifier(slug, llm=mock_llm)
+            assert "error" in result
+        asyncio.run(_test())
+
+    def _create_test_run_for_llm(self, core) -> str:
+        from haber_kurator_core import FetchedNewsItem, SourceTier
+        cluster = {
+            "story_title": "Test LLM Pipeline",
+            "items": [
+                FetchedNewsItem(title="A", url="https://r.com", source_name="Reuters",
+                    source_tier=SourceTier.PRIMARY, summary="News", category="global"),
+                FetchedNewsItem(title="B", url="https://ap.com", source_name="AP",
+                    source_tier=SourceTier.PRIMARY, summary="News", category="global"),
+            ],
+            "sources": ["Reuters", "AP"],
+            "source_tiers": [0, 0],
+            "source_count": 2,
+            "tier_count": {"primary": 2, "major": 0, "specialized": 0},
+            "categories": ["global"],
+            "best_url": "https://r.com",
+        }
+        return core.create_news_run(cluster)["slug"]
+
+
+def _make_mock_llm(return_text: str):
+    """Create a mock LLM object with async acomplete."""
+    mock_llm = MagicMock()
+    class FakeResp:
+        def __init__(self, t): self.text = t
+    async def fake_aco(m):
+        await asyncio.sleep(0.001)
+        return FakeResp(return_text)
+    mock_llm.acomplete = fake_aco
+    return mock_llm
