@@ -257,7 +257,7 @@ def _load_news_sources(json_path: Optional[Path] = None) -> Dict[str, NewsSource
                 raw = json.load(f)
         except (json.JSONDecodeError, OSError) as e:
             logger.warning(f"Failed to load sources from {json_path}: {e}")
-            return dict(NEWS_SOURCES_EMBEDDED)
+            return {}
 
         tier_map = {
             "PRIMARY": SourceTier.PRIMARY,
@@ -283,7 +283,52 @@ def _load_news_sources(json_path: Optional[Path] = None) -> Dict[str, NewsSource
         logger.info(f"Loaded {len(sources)} news sources from {json_path}")
         return sources
 
-    return dict(NEWS_SOURCES_EMBEDDED)
+    return {}
+
+
+# ══════════════════════════════════════════════════════════════
+# RUN‑TIME DATA CLASSES
+# ══════════════════════════════════════════════════════════════
+
+
+@dataclass
+class RunState:
+    slug: str
+    title: str = ""
+    state: str = "captured"
+    route: str = "VERIFIED"
+    created: str = ""
+    updated: str = ""
+    source_type: str = "multi-source"
+    verification_level: str = "unverified"
+
+
+@dataclass
+class SlopResult:
+    score: str = "PASS"
+    tier1_count: int = 0
+    tier2_count: int = 0
+    tier3_count: int = 0
+    bonus_count: int = 0
+    findings: List[str] = field(default_factory=list)
+    findings_tier1: List[str] = field(default_factory=list)
+    findings_tier2: List[str] = field(default_factory=list)
+    findings_tier3: List[str] = field(default_factory=list)
+    findings_bonus: List[str] = field(default_factory=list)
+    all_findings: List[str] = field(default_factory=list)
+
+
+@dataclass
+class FetchedNewsItem:
+    """A raw news item fetched from a source."""
+    title: str
+    url: str
+    source_name: str
+    source_tier: SourceTier
+    published: str = ""
+    summary: str = ""
+    category: str = "general"
+    guid: str = ""
 
 
 # ══════════════════════════════════════════════════════════════
@@ -326,436 +371,4 @@ WRITER_FIELDS = [
 ]
 
 
-# ══════════════════════════════════════════════════════════════
-# EMBEDDED NEWS SOURCES (fallback)
-# ══════════════════════════════════════════════════════════════
 
-# ══════════════════════════════════════════════════════════════
-# RUN‑TIME DATA CLASSES
-# ══════════════════════════════════════════════════════════════
-
-@dataclass
-class RunState:
-    slug: str
-    title: str = ""
-    state: str = "captured"
-    route: str = "VERIFIED"
-    created: str = ""
-    updated: str = ""
-    source_type: str = "multi-source"
-    verification_level: str = "unverified"
-
-
-@dataclass
-class SlopResult:
-    score: str = "PASS"
-    tier1_count: int = 0
-    tier2_count: int = 0
-    tier3_count: int = 0
-    bonus_count: int = 0
-    findings: List[str] = field(default_factory=list)
-    findings_tier1: List[str] = field(default_factory=list)
-    findings_tier2: List[str] = field(default_factory=list)
-    findings_tier3: List[str] = field(default_factory=list)
-    findings_bonus: List[str] = field(default_factory=list)
-    all_findings: List[str] = field(default_factory=list)
-
-
-@dataclass
-class FetchedNewsItem:
-    """A raw news item fetched from a source."""
-    title: str
-    url: str
-    source_name: str
-    source_tier: SourceTier
-    published: str = ""
-    summary: str = ""
-    category: str = "general"
-    guid: str = ""
-
-
-NEWS_SOURCES_EMBEDDED: Dict[str, NewsSource] = {
-    # ── TIER 0: PRIMARY WIRE SERVICES ──
-    "reuters": NewsSource(
-        name="Reuters",
-        base_url="https://www.reuters.com",
-        category="news",
-        tier=SourceTier.PRIMARY,
-        rss_feeds=[
-            "https://www.reuters.com/arc/outboundfeeds/newsletter-rss/world/",
-            "https://www.reuters.com/arc/outboundfeeds/newsletter-rss/business/",
-            "https://www.reuters.com/arc/outboundfeeds/newsletter-rss/technology/",
-        ],
-        notes="World's largest wire service. Strict editorial standards.",
-    ),
-    "ap": NewsSource(
-        name="Associated Press (AP)",
-        base_url="https://apnews.com",
-        category="news",
-        tier=SourceTier.PRIMARY,
-        rss_feeds=["https://rsshub.app/apnews"],
-        language="en",
-        notes="Independent wire service, founded 1846. Gold standard for factual reporting.",
-    ),
-    "afp": NewsSource(
-        name="Agence France-Presse (AFP)",
-        base_url="https://www.afp.com",
-        category="news",
-        tier=SourceTier.PRIMARY,
-        rss_feeds=["https://www.afp.com/en/rss"],
-        notes="Third major global wire service. Founded 1835.",
-    ),
-    "bbc": NewsSource(
-        name="BBC News",
-        base_url="https://www.bbc.com/news",
-        category="news",
-        tier=SourceTier.PRIMARY,
-        rss_feeds=[
-            "https://feeds.bbci.co.uk/news/rss.xml",
-            "https://feeds.bbci.co.uk/news/technology/rss.xml",
-            "https://feeds.bbci.co.uk/news/world/rss.xml",
-            "https://feeds.bbci.co.uk/news/business/rss.xml",
-            "https://feeds.bbci.co.uk/news/science_and_environment/rss.xml",
-        ],
-        language="en",
-        notes="UK public service broadcaster. Royal Charter ensures editorial independence.",
-    ),
-    # ── TIER 1: MAJOR OUTLETS ──
-    "bloomberg": NewsSource(
-        name="Bloomberg",
-        base_url="https://www.bloomberg.com",
-        category="business",
-        tier=SourceTier.MAJOR,
-        rss_feeds=[
-            "https://feeds.bloomberg.com/markets/news.rss",
-            "https://feeds.bloomberg.com/technology/news.rss",
-        ],
-        notes="Global financial data and news leader. Strong fact-checking.",
-    ),
-    "wsj": NewsSource(
-        name="The Wall Street Journal",
-        base_url="https://www.wsj.com",
-        category="business",
-        tier=SourceTier.MAJOR,
-        rss_feeds=[
-            "https://feeds.a.dj.com/rss/RSSWorldNews.xml",
-            "https://feeds.a.dj.com/rss/RSSWSJD.xml",
-        ],
-        notes="Premier US financial newspaper. 40+ Pulitzer Prizes.",
-    ),
-    "ft": NewsSource(
-        name="Financial Times",
-        base_url="https://www.ft.com",
-        category="business",
-        tier=SourceTier.MAJOR,
-        rss_feeds=[
-            "https://www.ft.com/technology?format=rss",
-            "https://www.ft.com/world?format=rss",
-        ],
-        notes="Leading global business publication. Known for accurate financial reporting.",
-    ),
-    "guardian": NewsSource(
-        name="The Guardian",
-        base_url="https://www.theguardian.com",
-        category="news",
-        tier=SourceTier.MAJOR,
-        rss_feeds=[
-            "https://www.theguardian.com/world/rss",
-            "https://www.theguardian.com/technology/rss",
-            "https://www.theguardian.com/business/rss",
-            "https://www.theguardian.com/science/rss",
-        ],
-        notes="UK daily newspaper with strong editorial standards.",
-    ),
-    "nytimes": NewsSource(
-        name="The New York Times",
-        base_url="https://www.nytimes.com",
-        category="news",
-        tier=SourceTier.MAJOR,
-        rss_feeds=[
-            "https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml",
-            "https://rss.nytimes.com/services/xml/rss/nyt/Technology.xml",
-            "https://rss.nytimes.com/services/xml/rss/nyt/Business.xml",
-            "https://rss.nytimes.com/services/xml/rss/nyt/Science.xml",
-            "https://rss.nytimes.com/services/xml/rss/nyt/World.xml",
-        ],
-        notes="Most awarded US newspaper (138+ Pulitzers).",
-    ),
-    "washington_post": NewsSource(
-        name="The Washington Post",
-        base_url="https://www.washingtonpost.com",
-        category="news",
-        tier=SourceTier.MAJOR,
-        rss_feeds=[
-            "https://feeds.washingtonpost.com/rss/world",
-            "https://feeds.washingtonpost.com/rss/national",
-            "https://feeds.washingtonpost.com/rss/business",
-        ],
-        notes="Major US newspaper, 70+ Pulitzers.",
-    ),
-    "aljazeera": NewsSource(
-        name="Al Jazeera English",
-        base_url="https://www.aljazeera.com",
-        category="news",
-        tier=SourceTier.MAJOR,
-        rss_feeds=[
-            "https://www.aljazeera.com/xml/rss/all.xml",
-            "https://www.aljazeera.com/xml/rss/news.xml",
-        ],
-        notes="Qatar-based global news network. Extensive on-ground reporting.",
-    ),
-    "npr": NewsSource(
-        name="NPR",
-        base_url="https://www.npr.org",
-        category="news",
-        tier=SourceTier.MAJOR,
-        rss_feeds=[
-            "https://feeds.npr.org/1001/rss.xml",
-            "https://feeds.npr.org/1019/rss.xml",
-            "https://feeds.npr.org/1007/rss.xml",
-        ],
-        notes="US public radio network. Known for thorough fact-checking.",
-    ),
-    "cnn": NewsSource(
-        name="CNN",
-        base_url="https://www.cnn.com",
-        category="news",
-        tier=SourceTier.MAJOR,
-        rss_feeds=["https://edition.cnn.com/services/rss/"],
-        language="en",
-        notes="Major US news network. Global reach, 24/7 news coverage.",
-    ),
-    "nbc_news": NewsSource(
-        name="NBC News",
-        base_url="https://www.nbcnews.com",
-        category="news",
-        tier=SourceTier.MAJOR,
-        rss_feeds=[
-            "https://feeds.nbcnews.com/nbcnews/public/news",
-            "https://feeds.nbcnews.com/nbcnews/public/tech",
-        ],
-        language="en",
-        notes="Major US broadcast news network.",
-    ),
-    "fox_news": NewsSource(
-        name="Fox News",
-        base_url="https://www.foxnews.com",
-        category="news",
-        tier=SourceTier.MAJOR,
-        rss_feeds=["https://moxie.foxnews.com/google-publisher/latest.xml"],
-        language="en",
-        notes="Major US cable news network.",
-    ),
-    # ── TIER 2: SPECIALIZED ──
-    "nature": NewsSource(
-        name="Nature",
-        base_url="https://www.nature.com",
-        category="science",
-        tier=SourceTier.SPECIALIZED,
-        rss_feeds=[
-            "https://www.nature.com/nature.rss",
-            "https://www.nature.com/nature/research.rss",
-        ],
-        notes="Premier international science journal. Peer-reviewed. Founded 1869.",
-    ),
-    "technology_review": NewsSource(
-        name="MIT Technology Review",
-        base_url="https://www.technologyreview.com",
-        category="technology",
-        tier=SourceTier.SPECIALIZED,
-        rss_feeds=[
-            "https://www.technologyreview.com/feed/",
-            "https://www.technologyreview.com/topics/artificial-intelligence/feed/",
-        ],
-        notes="MIT-owned technology magazine.",
-    ),
-    "the_verge": NewsSource(
-        name="The Verge",
-        base_url="https://www.theverge.com",
-        category="technology",
-        tier=SourceTier.SPECIALIZED,
-        rss_feeds=[
-            "https://www.theverge.com/rss/index.xml",
-            "https://www.theverge.com/ai-artificial-intelligence/rss.xml",
-            "https://www.theverge.com/tech/rss.xml",
-        ],
-        notes="Leading tech news outlet.",
-    ),
-    "wired": NewsSource(
-        name="Wired",
-        base_url="https://www.wired.com",
-        category="technology",
-        tier=SourceTier.SPECIALIZED,
-        rss_feeds=[
-            "https://www.wired.com/feed/rss",
-            "https://www.wired.com/feed/category/technology/latest",
-        ],
-        notes="Authoritative tech & culture magazine.",
-    ),
-    "economist": NewsSource(
-        name="The Economist",
-        base_url="https://www.economist.com",
-        category="news",
-        tier=SourceTier.MAJOR,
-        rss_feeds=[
-            "https://www.economist.com/feeds/print-sections/77/business.xml",
-            "https://www.economist.com/feeds/print-sections/79/science-and-technology.xml",
-        ],
-        notes="Weekly news & international affairs publication.",
-    ),
-    "hbr": NewsSource(
-        name="Harvard Business Review",
-        base_url="https://hbr.org",
-        category="business",
-        tier=SourceTier.SPECIALIZED,
-        rss_feeds=[
-            "https://hbr.org/feed/latest",
-            "https://hbr.org/feed/topics/technology",
-        ],
-        notes="Peer-reviewed business research.",
-    ),
-    "sciencedaily": NewsSource(
-        name="ScienceDaily",
-        base_url="https://www.sciencedaily.com",
-        category="science",
-        tier=SourceTier.SPECIALIZED,
-        rss_feeds=[
-            "https://www.sciencedaily.com/rss/all.xml",
-            "https://www.sciencedaily.com/rss/technology.xml",
-            "https://www.sciencedaily.com/rss/matter_energy.xml",
-        ],
-        notes="Science news aggregator with strict sourcing from peer-reviewed journals.",
-    ),
-    # ── ADDITIONAL MAJOR ──
-    "cnbc": NewsSource(
-        name="CNBC",
-        base_url="https://www.cnbc.com",
-        category="business",
-        tier=SourceTier.MAJOR,
-        rss_feeds=[
-            "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114",
-            "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=19854910",
-        ],
-        notes="Major US business news network.",
-    ),
-    "reuters_investigates": NewsSource(
-        name="Reuters Investigates",
-        base_url="https://www.reuters.com/investigates",
-        category="news",
-        tier=SourceTier.PRIMARY,
-        rss_feeds=["https://www.reuters.com/arc/outboundfeeds/newsletter-rss/world/"],
-        notes="Reuters' Pulitzer Prize-winning investigative journalism unit.",
-    ),
-    # ── TURKISH NEWS SOURCES ──
-    "aa": NewsSource(
-        name="Anadolu Ajansı (AA)",
-        base_url="https://www.aa.com.tr",
-        category="news",
-        tier=SourceTier.MAJOR,
-        rss_feeds=["https://www.aa.com.tr/tr/rss/default?cat=guncel"],
-        language="tr", country="turkey",
-        notes="Türkiye'nin resmî haber ajansı. 1920'de kuruldu.",
-    ),
-    "bbc_turkce": NewsSource(
-        name="BBC Türkçe",
-        base_url="https://www.bbc.com/turkce",
-        category="news",
-        tier=SourceTier.MAJOR,
-        rss_feeds=["https://feeds.bbci.co.uk/turkce/rss.xml"],
-        language="tr", country="turkey",
-        notes="BBC'nin Türkçe yayını.",
-    ),
-    "euronews_tr": NewsSource(
-        name="Euronews Türkçe",
-        base_url="https://tr.euronews.com",
-        category="news",
-        tier=SourceTier.MAJOR,
-        rss_feeds=[],
-        language="tr", country="turkey",
-        notes="Çok dilli haber ağının Türkçe servisi. ⚠️ RSS feed kullanılamıyor (Mayıs 2026).",
-    ),
-    "bloomberght": NewsSource(
-        name="Bloomberg HT",
-        base_url="https://www.bloomberght.com",
-        category="business",
-        tier=SourceTier.MAJOR,
-        rss_feeds=["https://www.bloomberght.com/rss"],
-        language="tr", country="turkey",
-        notes="Bloomberg'in Türkiye ortaklığıyla yayın yapan finans ve ekonomi kanalı.",
-    ),
-    "t24": NewsSource(
-        name="T24",
-        base_url="https://t24.com.tr",
-        category="news",
-        tier=SourceTier.SPECIALIZED,
-        rss_feeds=["https://news.google.com/rss/search?q=site:t24.com.tr&hl=tr&gl=TR&ceid=TR:tr"],
-        language="tr", country="turkey",
-        notes="Bağımsız haber sitesi. Google News RSS kullanılıyor.",
-    ),
-    "medyascope": NewsSource(
-        name="Medyascope",
-        base_url="https://medyascope.tv",
-        category="news",
-        tier=SourceTier.SPECIALIZED,
-        rss_feeds=["https://medyascope.tv/feed/"],
-        language="tr", country="turkey",
-        notes="Bağımsız haber platformu.",
-    ),
-    "diken": NewsSource(
-        name="Diken",
-        base_url="https://www.diken.com.tr",
-        category="news",
-        tier=SourceTier.SPECIALIZED,
-        rss_feeds=["https://www.diken.com.tr/feed/"],
-        language="tr", country="turkey",
-        notes="Bağımsız haber sitesi.",
-    ),
-    "birgun": NewsSource(
-        name="BirGün",
-        base_url="https://www.birgun.net",
-        category="news",
-        tier=SourceTier.SPECIALIZED,
-        rss_feeds=["https://www.birgun.net/rss/home"],
-        language="tr", country="turkey",
-        notes="Günlük gazete. Bağımsız sol yayın çizgisi.",
-    ),
-    "sozcu": NewsSource(
-        name="Sözcü",
-        base_url="https://www.sozcu.com.tr",
-        category="news",
-        tier=SourceTier.SPECIALIZED,
-        rss_feeds=[
-            "https://www.sozcu.com.tr/feeds-haberler",
-            "https://www.sozcu.com.tr/feeds-son-dakika",
-        ],
-        language="tr", country="turkey",
-        notes="Türkiye'nin en çok okunan gazetelerinden.",
-    ),
-    "cumhuriyet": NewsSource(
-        name="Cumhuriyet",
-        base_url="https://www.cumhuriyet.com.tr",
-        category="news",
-        tier=SourceTier.SPECIALIZED,
-        rss_feeds=["http://www.cumhuriyet.com.tr/rss/son_dakika.xml"],
-        language="tr", country="turkey",
-        notes="Türkiye'nin en köklü gazetelerinden (1924).",
-    ),
-    "hurriyet": NewsSource(
-        name="Hürriyet",
-        base_url="https://www.hurriyet.com.tr",
-        category="news",
-        tier=SourceTier.SPECIALIZED,
-        rss_feeds=["http://rss.hurriyet.com.tr/"],
-        language="tr", country="turkey",
-        notes="Türkiye'nin önde gelen gazetelerinden.",
-    ),
-    "webrazzi": NewsSource(
-        name="Webrazzi",
-        base_url="https://webrazzi.com",
-        category="technology",
-        tier=SourceTier.SPECIALIZED,
-        rss_feeds=["https://webrazzi.com/feed/"],
-        language="tr", country="turkey",
-        notes="Türkiye'nin önde gelen teknoloji haberciliği platformu.",
-    ),
-}

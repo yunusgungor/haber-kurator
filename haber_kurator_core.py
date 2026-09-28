@@ -31,7 +31,7 @@ from haber_kurator.modules.fetcher import FetcherMixin
 from haber_kurator.modules.scanner import ScannerMixin
 
 from haber_kurator.modules.models import (
-    VERSION, CONFIG, NEWS_SOURCES, NEWS_SOURCES_EMBEDDED,
+    VERSION, CONFIG, NEWS_SOURCES,
     STATE_LIFECYCLE, STATE_TRANSITIONS, STATE_ALIAS_MAP,
     ROUTE_VERIFIED, ROUTE_HIGH_SLOP, ROUTE_ESCALATED, WRITER_FIELDS,
     SourceTier, VerificationLevel,
