@@ -49,6 +49,35 @@ logger = logging.getLogger(__name__)
 VERSION = os.getenv("HABER_VERSION", "3.1.0")
 
 
+# ══════════════════════════════════════════════════════════════
+# EXCEPTION HIERARCHY (E-020)
+# ══════════════════════════════════════════════════════════════
+
+class HaberKuratorError(Exception):
+    """Base for all Haber-Kuratör exceptions."""
+    def __init__(self, message: str, *, slug: str | None = None,
+                 details: dict | None = None):
+        super().__init__(message)
+        self.slug = slug
+        self.details = details or {}
+
+
+class SourceError(HaberKuratorError):
+    """Source loading, RSS fetch, or parsing errors."""
+
+
+class StateError(HaberKuratorError):
+    """State machine transition or validation errors."""
+
+
+class ConfigError(HaberKuratorError):
+    """Configuration or env-loading errors."""
+
+
+class LLMError(HaberKuratorError):
+    """LLM call or response-parsing errors."""
+
+
 def _env_bool(key: str, default: bool) -> bool:
     val = os.getenv(key)
     if val is None:
@@ -1021,8 +1050,8 @@ class HaberKuratorCore:
             if d.is_dir():
                 try:
                     self.sync_state(d.name)
-                except Exception:
-                    continue
+                except (OSError, PermissionError, StateError) as e:
+                    logger.debug("sync_state skipped %s: %s", d.name, e)
 
     # ──────────────────────────────────────────────────────────
     # STATE CACHE — SQLite Backed
@@ -2454,8 +2483,8 @@ class HaberKuratorCore:
 
         try:
             self.update_state(slug, state, force=True)
-        except Exception:
-            pass
+        except (OSError, PermissionError) as e:
+            logger.debug("sync_state update skipped %s: %s", slug, e)
         return state
 
     def get_state(self, slug: str) -> str:
@@ -3582,7 +3611,7 @@ Return as markdown:
                     items = self._fetch_rss_feed(feed_url, src)
                     for item in items[:1]:
                         signals.append(f"[{src.name}] {item.title[:110]}")
-                except Exception:
+                except (SourceError, urllib.error.URLError, OSError):
                     continue
 
         if not signals:
@@ -3687,7 +3716,7 @@ Return as markdown:
                             rd = self._analyze_single_run(d)
                             if rd:
                                 all_runs.append(rd)
-                        except Exception:
+                        except (OSError, PermissionError):
                             continue
 
         if not all_runs:
@@ -3837,7 +3866,7 @@ Return as markdown:
                                     "state": run.get("state", "unknown"),
                                 })
                                 break
-                        except Exception:
+                        except (OSError, PermissionError):
                             continue
             except PermissionError:
                 continue
@@ -3882,7 +3911,7 @@ Return as markdown:
                     else:
                         obj_content += "\nstate: archived"
                     obj_path.write_text(obj_content, encoding="utf-8")
-                except Exception:
+                except (OSError, PermissionError):
                     pass
             return f"✅ Run {slug} archived."
         except Exception as e:
