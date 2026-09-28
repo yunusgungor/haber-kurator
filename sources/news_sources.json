@@ -1,0 +1,501 @@
+[
+  {
+    "key": "reuters",
+    "name": "Reuters",
+    "base_url": "https://www.reuters.com",
+    "category": "news",
+    "tier": "PRIMARY",
+    "rss_feeds": [
+      "https://www.reuters.com/arc/outboundfeeds/newsletter-rss/world/",
+      "https://www.reuters.com/arc/outboundfeeds/newsletter-rss/business/",
+      "https://www.reuters.com/arc/outboundfeeds/newsletter-rss/technology/"
+    ],
+    "language": "en",
+    "country": "global",
+    "notes": "World's largest wire service. Strict editorial standards. No political bias rating needed — pure factual reporting."
+  },
+  {
+    "key": "ap",
+    "name": "Associated Press (AP)",
+    "base_url": "https://apnews.com",
+    "category": "news",
+    "tier": "PRIMARY",
+    "rss_feeds": [
+      "https://rsshub.app/apnews"
+    ],
+    "language": "en",
+    "country": "global",
+    "notes": "Independent wire service, founded 1846. Gold standard for factual reporting. Used by 1,500+ newspapers globally."
+  },
+  {
+    "key": "afp",
+    "name": "Agence France-Presse (AFP)",
+    "base_url": "https://www.afp.com",
+    "category": "news",
+    "tier": "PRIMARY",
+    "rss_feeds": [
+      "https://www.afp.com/en/rss"
+    ],
+    "language": "en",
+    "country": "global",
+    "notes": "Third major global wire service. Founded 1835. 2,400+ journalists in 151 countries."
+  },
+  {
+    "key": "bbc",
+    "name": "BBC News",
+    "base_url": "https://www.bbc.com/news",
+    "category": "news",
+    "tier": "PRIMARY",
+    "rss_feeds": [
+      "https://feeds.bbci.co.uk/news/rss.xml",
+      "https://feeds.bbci.co.uk/news/technology/rss.xml",
+      "https://feeds.bbci.co.uk/news/world/rss.xml",
+      "https://feeds.bbci.co.uk/news/business/rss.xml",
+      "https://feeds.bbci.co.uk/news/science_and_environment/rss.xml"
+    ],
+    "language": "en",
+    "country": "global",
+    "notes": "UK public service broadcaster. Royal Charter ensures editorial independence. One of the most trusted news brands globally."
+  },
+  {
+    "key": "bloomberg",
+    "name": "Bloomberg",
+    "base_url": "https://www.bloomberg.com",
+    "category": "business",
+    "tier": "MAJOR",
+    "rss_feeds": [
+      "https://feeds.bloomberg.com/markets/news.rss",
+      "https://feeds.bloomberg.com/technology/news.rss"
+    ],
+    "language": "en",
+    "country": "global",
+    "notes": "Global business & financial news. 2,700+ journalists, 120 countries. Strict editorial process."
+  },
+  {
+    "key": "wsj",
+    "name": "The Wall Street Journal",
+    "base_url": "https://www.wsj.com",
+    "category": "business",
+    "tier": "MAJOR",
+    "rss_feeds": [
+      "https://feeds.a.dj.com/rss/RSSWSJD.xml",
+      "https://www.wsj.com/xml/rss/3_7085.xml"
+    ],
+    "language": "en",
+    "country": "global",
+    "notes": "Premier US business daily. Pulitzer Prize-winning journalism. Strong editorial standards."
+  },
+  {
+    "key": "ft",
+    "name": "Financial Times",
+    "base_url": "https://www.ft.com",
+    "category": "business",
+    "tier": "MAJOR",
+    "rss_feeds": [
+      "https://www.ft.com/rss/home",
+      "https://www.ft.com/rss/companies/technology"
+    ],
+    "language": "en",
+    "country": "global",
+    "notes": "Leading global business publication. Known for accurate, well-sourced financial reporting."
+  },
+  {
+    "key": "guardian",
+    "name": "The Guardian",
+    "base_url": "https://www.theguardian.com",
+    "category": "news",
+    "tier": "MAJOR",
+    "rss_feeds": [
+      "https://www.theguardian.com/world/rss",
+      "https://www.theguardian.com/technology/rss",
+      "https://www.theguardian.com/business/rss",
+      "https://www.theguardian.com/science/rss"
+    ],
+    "language": "en",
+    "country": "global",
+    "notes": "UK daily newspaper with strong editorial standards. Multiple Pulitzer and investigative awards."
+  },
+  {
+    "key": "nytimes",
+    "name": "The New York Times",
+    "base_url": "https://www.nytimes.com",
+    "category": "news",
+    "tier": "MAJOR",
+    "rss_feeds": [
+      "https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml",
+      "https://rss.nytimes.com/services/xml/rss/nyt/Technology.xml",
+      "https://rss.nytimes.com/services/xml/rss/nyt/Business.xml",
+      "https://rss.nytimes.com/services/xml/rss/nyt/Science.xml",
+      "https://rss.nytimes.com/services/xml/rss/nyt/World.xml"
+    ],
+    "language": "en",
+    "country": "global",
+    "notes": "Most awarded US newspaper (138+ Pulitzers). Strong editorial and fact-checking standards."
+  },
+  {
+    "key": "washington_post",
+    "name": "The Washington Post",
+    "base_url": "https://www.washingtonpost.com",
+    "category": "news",
+    "tier": "MAJOR",
+    "rss_feeds": [
+      "https://feeds.washingtonpost.com/rss/world",
+      "https://feeds.washingtonpost.com/rss/national",
+      "https://feeds.washingtonpost.com/rss/business"
+    ],
+    "language": "en",
+    "country": "global",
+    "notes": "Major US newspaper, 70+ Pulitzers. Known for investigative journalism and accurate reporting."
+  },
+  {
+    "key": "aljazeera",
+    "name": "Al Jazeera English",
+    "base_url": "https://www.aljazeera.com",
+    "category": "news",
+    "tier": "MAJOR",
+    "rss_feeds": [
+      "https://www.aljazeera.com/xml/rss/all.xml",
+      "https://www.aljazeera.com/xml/rss/news.xml"
+    ],
+    "language": "en",
+    "country": "global",
+    "notes": "Qatar-based global news network. Multiple international journalism awards. Extensive on-ground reporting."
+  },
+  {
+    "key": "npr",
+    "name": "NPR",
+    "base_url": "https://www.npr.org",
+    "category": "news",
+    "tier": "MAJOR",
+    "rss_feeds": [
+      "https://feeds.npr.org/1001/rss.xml",
+      "https://feeds.npr.org/1019/rss.xml",
+      "https://feeds.npr.org/1007/rss.xml"
+    ],
+    "language": "en",
+    "country": "global",
+    "notes": "US public radio network. Known for thorough fact-checking and unbiased reporting."
+  },
+  {
+    "key": "cnn",
+    "name": "CNN",
+    "base_url": "https://www.cnn.com",
+    "category": "news",
+    "tier": "MAJOR",
+    "rss_feeds": [
+      "https://edition.cnn.com/services/rss/"
+    ],
+    "language": "en",
+    "country": "global",
+    "notes": "Major US news network. Global reach, 24/7 news coverage. Strong editorial standards."
+  },
+  {
+    "key": "nbc_news",
+    "name": "NBC News",
+    "base_url": "https://www.nbcnews.com",
+    "category": "news",
+    "tier": "MAJOR",
+    "rss_feeds": [
+      "https://feeds.nbcnews.com/nbcnews/public/news",
+      "https://feeds.nbcnews.com/nbcnews/public/tech"
+    ],
+    "language": "en",
+    "country": "global",
+    "notes": "Major US broadcast news network. Part of NBCUniversal. Pulitzer Prize-winning journalism."
+  },
+  {
+    "key": "fox_news",
+    "name": "Fox News",
+    "base_url": "https://www.foxnews.com",
+    "category": "news",
+    "tier": "MAJOR",
+    "rss_feeds": [
+      "https://moxie.foxnews.com/google-publisher/latest.xml"
+    ],
+    "language": "en",
+    "country": "global",
+    "notes": "Major US cable news network. Extensive domestic and international coverage."
+  },
+  {
+    "key": "nature",
+    "name": "Nature",
+    "base_url": "https://www.nature.com",
+    "category": "science",
+    "tier": "SPECIALIZED",
+    "rss_feeds": [
+      "https://www.nature.com/nature.rss",
+      "https://www.nature.com/nature/research.rss"
+    ],
+    "language": "en",
+    "country": "global",
+    "notes": "Premier international science journal. Peer-reviewed. Founded 1869."
+  },
+  {
+    "key": "technology_review",
+    "name": "MIT Technology Review",
+    "base_url": "https://www.technologyreview.com",
+    "category": "technology",
+    "tier": "SPECIALIZED",
+    "rss_feeds": [
+      "https://www.technologyreview.com/feed/",
+      "https://www.technologyreview.com/topics/artificial-intelligence/feed/"
+    ],
+    "language": "en",
+    "country": "global",
+    "notes": "MIT-owned technology magazine. Rigorous editorial standards."
+  },
+  {
+    "key": "the_verge",
+    "name": "The Verge",
+    "base_url": "https://www.theverge.com",
+    "category": "technology",
+    "tier": "SPECIALIZED",
+    "rss_feeds": [
+      "https://www.theverge.com/rss/index.xml",
+      "https://www.theverge.com/ai-artificial-intelligence/rss.xml",
+      "https://www.theverge.com/tech/rss.xml"
+    ],
+    "language": "en",
+    "country": "global",
+    "notes": "Leading tech news outlet. Known for in-depth reporting on technology policy and innovation."
+  },
+  {
+    "key": "wired",
+    "name": "Wired",
+    "base_url": "https://www.wired.com",
+    "category": "technology",
+    "tier": "SPECIALIZED",
+    "rss_feeds": [
+      "https://www.wired.com/feed/rss",
+      "https://www.wired.com/feed/category/technology/latest"
+    ],
+    "language": "en",
+    "country": "global",
+    "notes": "Authoritative tech & culture magazine. Strong editorial standards since 1993."
+  },
+  {
+    "key": "economist",
+    "name": "The Economist",
+    "base_url": "https://www.economist.com",
+    "category": "news",
+    "tier": "MAJOR",
+    "rss_feeds": [
+      "https://www.economist.com/feeds/print-sections/77/business.xml",
+      "https://www.economist.com/feeds/print-sections/79/science-and-technology.xml"
+    ],
+    "language": "en",
+    "country": "global",
+    "notes": "Weekly news & international affairs publication. Known for in-depth analysis and factual accuracy."
+  },
+  {
+    "key": "hbr",
+    "name": "Harvard Business Review",
+    "base_url": "https://hbr.org",
+    "category": "business",
+    "tier": "SPECIALIZED",
+    "rss_feeds": [
+      "https://hbr.org/feed/latest",
+      "https://hbr.org/feed/topics/technology"
+    ],
+    "language": "en",
+    "country": "global",
+    "notes": "Peer-reviewed business research. Published by Harvard Business Publishing."
+  },
+  {
+    "key": "sciencedaily",
+    "name": "ScienceDaily",
+    "base_url": "https://www.sciencedaily.com",
+    "category": "science",
+    "tier": "SPECIALIZED",
+    "rss_feeds": [
+      "https://www.sciencedaily.com/rss/all.xml",
+      "https://www.sciencedaily.com/rss/technology.xml",
+      "https://www.sciencedaily.com/rss/matter_energy.xml"
+    ],
+    "language": "en",
+    "country": "global",
+    "notes": "Science news aggregator with strict sourcing from peer-reviewed journals."
+  },
+  {
+    "key": "cnbc",
+    "name": "CNBC",
+    "base_url": "https://www.cnbc.com",
+    "category": "business",
+    "tier": "MAJOR",
+    "rss_feeds": [
+      "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114",
+      "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=19854910"
+    ],
+    "language": "en",
+    "country": "global",
+    "notes": "Major US business news network. Strong financial reporting credentials."
+  },
+  {
+    "key": "reuters_investigates",
+    "name": "Reuters Investigates",
+    "base_url": "https://www.reuters.com/investigates",
+    "category": "news",
+    "tier": "PRIMARY",
+    "rss_feeds": [
+      "https://www.reuters.com/arc/outboundfeeds/newsletter-rss/world/"
+    ],
+    "language": "en",
+    "country": "global",
+    "notes": "Reuters' Pulitzer Prize-winning investigative journalism unit."
+  },
+  {
+    "key": "aa",
+    "name": "Anadolu Ajansı (AA)",
+    "base_url": "https://www.aa.com.tr",
+    "category": "news",
+    "tier": "MAJOR",
+    "rss_feeds": [
+      "https://www.aa.com.tr/tr/rss/default?cat=guncel"
+    ],
+    "language": "tr",
+    "country": "turkey",
+    "notes": "Türkiye'nin resmî haber ajansı. 1920'de kuruldu. 11 dilde yayın, 100+ ülkede büro. Wire service statüsünde."
+  },
+  {
+    "key": "bbc_turkce",
+    "name": "BBC Türkçe",
+    "base_url": "https://www.bbc.com/turkce",
+    "category": "news",
+    "tier": "MAJOR",
+    "rss_feeds": [
+      "https://feeds.bbci.co.uk/turkce/rss.xml"
+    ],
+    "language": "tr",
+    "country": "turkey",
+    "notes": "BBC'nin Türkçe yayını. Kraliyet tüzüğü ile editoryal bağımsızlık. Tarafsız ve güvenilir habercilik."
+  },
+  {
+    "key": "euronews_tr",
+    "name": "Euronews Türkçe",
+    "base_url": "https://tr.euronews.com",
+    "category": "news",
+    "tier": "MAJOR",
+    "rss_feeds": [],
+    "language": "tr",
+    "country": "turkey",
+    "notes": "Çok dilli haber ağının Türkçe servisi. ⚠️ RSS feed kullanılamıyor (Mayıs 2026)."
+  },
+  {
+    "key": "bloomberght",
+    "name": "Bloomberg HT",
+    "base_url": "https://www.bloomberght.com",
+    "category": "business",
+    "tier": "MAJOR",
+    "rss_feeds": [
+      "https://www.bloomberght.com/rss"
+    ],
+    "language": "tr",
+    "country": "turkey",
+    "notes": "Bloomberg'in Türkiye ortaklığıyla yayın yapan finans ve ekonomi kanalı. Bloomberg'in editoryal standartları."
+  },
+  {
+    "key": "t24",
+    "name": "T24",
+    "base_url": "https://t24.com.tr",
+    "category": "news",
+    "tier": "SPECIALIZED",
+    "rss_feeds": [
+      "https://news.google.com/rss/search?q=site:t24.com.tr&hl=tr&gl=TR&ceid=TR:tr"
+    ],
+    "language": "tr",
+    "country": "turkey",
+    "notes": "Bağımsız haber sitesi. Direkt RSS kapalı (Cloudflare WAF). Google News RSS kullanılıyor (E-002)."
+  },
+  {
+    "key": "medyascope",
+    "name": "Medyascope",
+    "base_url": "https://medyascope.tv",
+    "category": "news",
+    "tier": "SPECIALIZED",
+    "rss_feeds": [
+      "https://medyascope.tv/feed/"
+    ],
+    "language": "tr",
+    "country": "turkey",
+    "notes": "Bağımsız haber platformu. RSS feed testi 2026-09-27: HTTP 200, 12 item (barsa E-002)."
+  },
+  {
+    "key": "diken",
+    "name": "Diken",
+    "base_url": "https://www.diken.com.tr",
+    "category": "news",
+    "tier": "SPECIALIZED",
+    "rss_feeds": [
+      "https://www.diken.com.tr/feed/"
+    ],
+    "language": "tr",
+    "country": "turkey",
+    "notes": "Bağımsız haber sitesi. RSS feed testi 2026-09-27: HTTP 200, 30 item (barsa E-002)."
+  },
+  {
+    "key": "birgun",
+    "name": "BirGün",
+    "base_url": "https://www.birgun.net",
+    "category": "news",
+    "tier": "SPECIALIZED",
+    "rss_feeds": [
+      "https://www.birgun.net/rss/home"
+    ],
+    "language": "tr",
+    "country": "turkey",
+    "notes": "Günlük gazete. Bağımsız sol yayın çizgisi. İşçi hakları, çevre, demokrasi odaklı habercilik."
+  },
+  {
+    "key": "sozcu",
+    "name": "Sözcü",
+    "base_url": "https://www.sozcu.com.tr",
+    "category": "news",
+    "tier": "SPECIALIZED",
+    "rss_feeds": [
+      "https://www.sozcu.com.tr/feeds-haberler",
+      "https://www.sozcu.com.tr/feeds-son-dakika"
+    ],
+    "language": "tr",
+    "country": "turkey",
+    "notes": "Türkiye'nin en çok okunan gazetelerinden. Geniş haber ağı, son dakika ve gündem."
+  },
+  {
+    "key": "cumhuriyet",
+    "name": "Cumhuriyet",
+    "base_url": "https://www.cumhuriyet.com.tr",
+    "category": "news",
+    "tier": "SPECIALIZED",
+    "rss_feeds": [
+      "http://www.cumhuriyet.com.tr/rss/son_dakika.xml"
+    ],
+    "language": "tr",
+    "country": "turkey",
+    "notes": "Türkiye'nin en köklü gazetelerinden (1924). Güçlü araştırmacı gazetecilik geleneği."
+  },
+  {
+    "key": "hurriyet",
+    "name": "Hürriyet",
+    "base_url": "https://www.hurriyet.com.tr",
+    "category": "news",
+    "tier": "SPECIALIZED",
+    "rss_feeds": [
+      "http://rss.hurriyet.com.tr/"
+    ],
+    "language": "tr",
+    "country": "turkey",
+    "notes": "Türkiye'nin önde gelen gazetelerinden. Geniş muhabir ağı, güncel haber ve analiz."
+  },
+  {
+    "key": "webrazzi",
+    "name": "Webrazzi",
+    "base_url": "https://webrazzi.com",
+    "category": "technology",
+    "tier": "SPECIALIZED",
+    "rss_feeds": [
+      "https://webrazzi.com/feed/"
+    ],
+    "language": "tr",
+    "country": "turkey",
+    "notes": "Türkiye'nin önde gelen teknoloji haberciliği platformu. Girişim, yatırım ve dijital dönüşüm odaklı."
+  }
+]

@@ -21,6 +21,7 @@ Key Features:
 
 import json
 import logging
+import os
 import re
 import shutil
 import sqlite3
@@ -36,18 +37,44 @@ from dataclasses import dataclass, field
 from enum import Enum
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    # python-dotenv optional — env vars still readable via os.getenv
+    load_dotenv = None
+
 logger = logging.getLogger(__name__)
 
-VERSION = "3.1.0"
+VERSION = os.getenv("HABER_VERSION", "3.1.0")
+
+
+def _env_bool(key: str, default: bool) -> bool:
+    val = os.getenv(key)
+    if val is None:
+        return default
+    return val.strip().lower() in ("1", "true", "yes", "on")
+
+
+def _env_float_list(key: str, default: list) -> list:
+    val = os.getenv(key)
+    if not val:
+        return default
+    try:
+        return [float(x.strip()) for x in val.split(",") if x.strip()]
+    except ValueError:
+        return default
+
 
 CONFIG = {
-    "version": "3.1.0",
-    "min_verification_level": 1,          # Minimum level to publish (0-3)
-    "rss_timeout": 5,                     # Seconds per RSS fetch
-    "rss_delay": 0.3,                     # (unused since v3.2 — kept for backward compat)
-    "rss_max_workers": 8,                 # Parallel RSS fetch pool size
-    "rss_retry_delays": [1.0, 2.0, 4.0],  # Exponential backoff intervals (seconds)
-    "news_max_age_hours": 48,             # Drop items older than this (default: 2 days)
+    "version": VERSION,
+    "min_verification_level": int(os.getenv("HABER_MIN_VERIFICATION_LEVEL", "1")),
+    "rss_timeout": int(os.getenv("HABER_RSS_TIMEOUT", "5")),
+    "rss_delay": float(os.getenv("HABER_RSS_DELAY", "0.3")),
+    "rss_max_workers": int(os.getenv("HABER_RSS_MAX_WORKERS", "8")),
+    "rss_retry_delays": _env_float_list("HABER_RSS_RETRY_DELAYS", [1.0, 2.0, 4.0]),
+    "news_max_age_hours": int(os.getenv("HABER_NEWS_MAX_AGE_HOURS", "48")),
+    "cache_enabled": _env_bool("HABER_CACHE_ENABLED", True),
 }
 
 # ══════════════════════════════════════════════════════════════
@@ -227,7 +254,73 @@ class CrossVerificationResult:
 # Tier 0 = Wire services (Reuters, AP, AFP) — gold standard for factual reporting.
 # Tier 1 = Major outlets with proven track records.
 
-NEWS_SOURCES: Dict[str, NewsSource] = {
+NEWS_SOURCES: Dict[str, NewsSource] = {}
+
+
+def _load_news_sources(json_path: Optional[Path] = None) -> Dict[str, NewsSource]:
+    """Load news sources from JSON file, falling back to embedded defaults.
+
+    JSON path resolution order:
+    1. Explicit json_path argument
+    2. HABER_SOURCES_JSON env var
+    3. {project_root}/sources/news_sources.json
+    4. {project_root}/.hermes/plugins/haber-kurator/sources/news_sources.json
+    """
+    if json_path is None:
+        env_path = os.getenv("HABER_SOURCES_JSON")
+        if env_path:
+            json_path = Path(env_path)
+        else:
+            # Try common locations
+            candidates = [
+                Path("sources/news_sources.json"),
+                Path(".hermes/plugins/haber-kurator/sources/news_sources.json"),
+            ]
+            json_path = next((p for p in candidates if p.exists()), None)
+
+    if json_path and json_path.exists():
+        try:
+            with open(json_path, "r", encoding="utf-8") as f:
+                raw = json.load(f)
+        except (json.JSONDecodeError, OSError) as e:
+            logger.warning(f"Failed to load sources from {json_path}: {e}")
+            return dict(NEWS_SOURCES_EMBEDDED)
+
+        tier_map = {
+            "PRIMARY": SourceTier.PRIMARY,
+            "MAJOR": SourceTier.MAJOR,
+            "SPECIALIZED": SourceTier.SPECIALIZED,
+        }
+
+        sources = {}
+        for entry in raw:
+            key = entry.get("key", "")
+            if not key:
+                continue
+            sources[key] = NewsSource(
+                name=entry.get("name", key),
+                base_url=entry.get("base_url", ""),
+                category=entry.get("category", "news"),
+                tier=tier_map.get(entry.get("tier", "SPECIALIZED"), SourceTier.SPECIALIZED),
+                rss_feeds=entry.get("rss_feeds", []),
+                language=entry.get("language", "en"),
+                country=entry.get("country", "global"),
+                notes=entry.get("notes", ""),
+            )
+        logger.info(f"Loaded {len(sources)} news sources from {json_path}")
+        return sources
+
+    # Fallback: use embedded defaults
+    return dict(NEWS_SOURCES_EMBEDDED)
+
+
+# ══════════════════════════════════════════════════════════════
+# EMBEDDED NEWS SOURCES (fallback when JSON not available)
+# ══════════════════════════════════════════════════════════════
+# These are the definitive source directory. When sources/news_sources.json
+# exists, it overrides this embedded list (see _load_news_sources() above).
+
+NEWS_SOURCES_EMBEDDED: Dict[str, NewsSource] = {
     # ════════════════════════════════════════════════════════
     # TIER 0: PRIMARY WIRE SERVICES (Highest Credibility)
     # ════════════════════════════════════════════════════════
@@ -890,8 +983,8 @@ class HaberKuratorCore:
         self.slop_tier3 = FULL_SLOP_TIER3
         self.slop_bonus = FULL_SLOP_BONUS
 
-        # Known sources directory
-        self.sources = NEWS_SOURCES.copy()
+        # Known sources directory — try JSON first, fall back to embedded
+        self.sources = _load_news_sources()
 
         self._init_stores_dirs()
         self._migrate_old_state()
