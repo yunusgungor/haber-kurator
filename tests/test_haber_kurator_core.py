@@ -1003,30 +1003,28 @@ class TestWriterAgent:
         # Politics
         article = agent.generate_news(politics_cluster)
         assert "Siyasi gelişmeler" in article, "Politics cluster should produce 'Siyasi gelişmeler'"
-        assert "#Siyaset" in article, "Politics cluster should have #Siyaset tag"
+        assert "[Özet]" in article, "Missing [Özet]"
+        assert "[Detaylar]" in article, "Missing [Detaylar]"
+        assert "[Kaynak]" in article, "Missing [Kaynak]"
 
         # Health
         article = agent.generate_news(health_cluster)
-        assert "Sağlık:" in article, "Health cluster should produce 'Sağlık:'"
-        # The keywords 'virus', 'health', 'covid', 'vaccine', 'clinical' should match
-        assert any(kw in article.lower() for kw in ["sağlık", "hastane", "hasta"]), \
-            "Health cluster should include health-related Turkish content"
+        assert "Sağlık" in article, "Health cluster should produce 'Sağlık'"
+        assert "[Özet]" in article
 
         # Tech
         article = agent.generate_news(tech_cluster)
-        assert "Teknoloji:" in article, "Tech cluster should produce 'Teknoloji:'"
-        assert "#Teknoloji" in article, "Tech cluster should have #Teknoloji tag"
+        assert "Teknoloji" in article, "Tech cluster should produce 'Teknoloji'"
 
         # Economy
         article = agent.generate_news(economy_cluster)
-        assert "Ekonomi:" in article, "Economy cluster should produce 'Ekonomi:'"
-        assert "#Ekonomi" in article, "Economy cluster should have #Ekonomi tag"
-        assert "piyasalar" in article.lower(), "Economy cluster should mention 'piyasalar'"
+        assert "Ekonomi" in article, "Economy cluster should produce 'Ekonomi'"
+        assert "Federal Reserve" in article, "Economy should mention original title"
 
         # Science
         article = agent.generate_news(science_cluster)
-        assert "Bilim:" in article, "Science cluster should produce 'Bilim:'"
-        assert "#Bilim" in article, "Science cluster should have #Bilim tag"
+        assert "Bilim" in article, "Science cluster should produce 'Bilim'"
+        assert "James Webb" in article, "Science should mention original title"
 
     def test_generate_news_single_source(self, agent, single_source_cluster):
         """Test generate_news handles single-source cluster without crashing."""

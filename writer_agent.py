@@ -18,6 +18,18 @@ from typing import Optional
 from .haber_kurator_core import HaberKuratorCore, VerificationLevel
 
 
+def _extract_section(text: str, start_tag: str, end_tag: str | None) -> str:
+    """Extract content between start_tag and end_tag from a structured text."""
+    idx = text.find(start_tag)
+    if idx == -1:
+        return ""
+    start = idx + len(start_tag)
+    if end_tag:
+        end = text.find(end_tag, start)
+        return text[start:end].strip() if end > start else text[start:].strip()
+    return text[start:].strip()
+
+
 class WriterAgent:
     """Automated Writer Agent that generates Turkish news content from verified clusters.
 
@@ -165,23 +177,29 @@ class WriterAgent:
     def generate_news(self, cluster: dict) -> str:
         """Generate a complete news article from a verified story cluster.
 
-        FIRST: Tries to generate a full Turkish article via LLM (_generate_turkish_summary).
-        FALLBACK: Produces Turkish [Özet] - [Detaylar] - [Kaynak] formatted output with
-        translated title. Only source names and URLs stay in original language.
+        Both LLM and template paths feed into _render_article() so the
+        Memos output is ALWAYS the same structure regardless of generation path.
         """
-        # PRIORITY 1: Full LLM-based Turkish article (richer content, proper Turkish)
-        llm_article = self._generate_turkish_summary(cluster)
-        if llm_article:
-            return llm_article
-
-        # PRIORITY 2: Template-based fallback (Turkish metadata + translated headline)
         items = cluster["items"]
         sources = list(set(cluster["sources"]))
         tiers = cluster.get("tier_count", {})
         best_url = cluster.get("best_url", "")
         title = cluster["story_title"]
 
-        # Translate title to Turkish if LLM available
+        # ── Try LLM-based content first ──────────────────────
+        llm_result = self._generate_turkish_summary(cluster)
+
+        if llm_result:
+            # Extract sections from LLM output
+            ozet_text = _extract_section(llm_result, "[Özet]", "[Detaylar]")
+            detaylar_text = _extract_section(llm_result, "[Detaylar]", "[Kaynak]")
+            kaynak_text = _extract_section(llm_result, "[Kaynak]", None)
+            return self._render_article(ozet_text or title,
+                                        detaylar_text or "",
+                                        kaynak_text or "",
+                                        sources, items, best_url)
+
+        # ── Template fallback ────────────────────────────────
         tr_title = self._translate_headline(title)
 
         primary_names = sorted(set(
@@ -191,7 +209,6 @@ class WriterAgent:
             i.source_name for i in items if i.source_tier.value == 1
         ))
 
-        # Source count description in Turkish
         n_src = len(sources)
         if n_src >= 10:
             kaynak_desc = f"{n_src} farklı kaynak tarafından doğrulandı"
@@ -202,17 +219,10 @@ class WriterAgent:
         else:
             kaynak_desc = f"{n_src} kaynak tarafından doğrulandı"
 
-        # Counts
         p_count = tiers.get("primary", 0)
         m_count = tiers.get("major", 0)
 
-        # Build Turkish news article — NO raw English RSS text!
-        article = ""
-
-        # Özet section — Turkish context around title
-        article += "[Özet] "
-
-        # Determine news category for Turkish context
+        # Özet
         has_politics = any(kw in title.lower() for kw in ['trump', 'china', 'russia', 'ukraine', 'iran',
                           'president', 'election', 'senate', 'congress', 'minister',
                           'erdogan', 'putin', 'xi ', 'biden', 'war', 'sanction',
@@ -244,78 +254,59 @@ class WriterAgent:
                          'carbon', 'emissions', 'renewable', 'solar', 'wind',
                          'fusion', 'reactor', 'cern', 'nobel'])
 
+        ozet_text_parts = []
         if has_politics:
-            article += "Siyasi gelişmeler: "
+            ozet_text_parts.append("Siyasi gelişmeler")
         elif has_health:
-            article += "Sağlık: "
+            ozet_text_parts.append("Sağlık")
         elif has_tech:
-            article += "Teknoloji: "
+            ozet_text_parts.append("Teknoloji")
         elif has_economy:
-            article += "Ekonomi: "
+            ozet_text_parts.append("Ekonomi")
         elif has_science:
-            article += "Bilim: "
+            ozet_text_parts.append("Bilim")
+        ozet_text_parts.append(tr_title)
+        ozet_text = " — ".join(ozet_text_parts)
 
-        article += f"{tr_title}"
-        article += "\n\n"
-
-        # Detaylar section — Turkish bullet points
-        article += "[Detaylar]\n"
-        article += f"- Bu haber, {kaynak_desc}.\n"
-
-        # Source names in Turkish context
+        # Detaylar
+        detay_lines = [f"- Bu haber, {kaynak_desc}."]
         all_src_names = []
         if primary_names:
             all_src_names.extend(primary_names[:4])
         if major_names:
             all_src_names.extend(major_names[:4])
         if all_src_names:
-            article += f"- Başlıca kaynaklar: {', '.join(all_src_names)}.\n"
-
-        # Verification level description in Turkish
+            detay_lines.append(f"- Başlıca kaynaklar: {', '.join(all_src_names)}.")
         if p_count >= 2:
-            article += f"- Haber, {p_count} farklı haber ajansı tarafından doğrulandı (en yüksek güvenilirlik seviyesi).\n"
+            detay_lines.append(f"- Haber, {p_count} farklı haber ajansı tarafından doğrulandı (en yüksek güvenilirlik seviyesi).")
         elif p_count >= 1 and m_count >= 1:
-            article += "- Haber, hem haber ajansı hem de büyük yayıncı teyidiyle doğrulandı.\n"
+            detay_lines.append("- Haber, hem haber ajansı hem de büyük yayıncı teyidiyle doğrulandı.")
         elif m_count >= 2:
-            article += "- Haber, birden fazla büyük yayıncı tarafından teyit edildi.\n"
-        elif n_src >= 2:
-            article += f"- Haber, {n_src} farklı kaynakta yer alıyor.\n"
+            detay_lines.append("- Haber, birden fazla büyük yayıncı tarafından teyit edildi.")
+        elif p_count >= 1:
+            detay_lines.append("- Haber, uluslararası haber ajansı tarafından doğrulandı.")
+        elif m_count >= 1:
+            detay_lines.append("- Haber, saygın yayıncı tarafından rapor edildi.")
+        else:
+            detay_lines.append("- Haber güvenilir kaynaklardan doğrulandı.")
+        detaylar_text = "\n".join(detay_lines)
+        kaynak_text = "\n".join(f"- {i.source_name}: {i.url}" for i in items[:5])
 
-        # Category-specific Turkish descriptions
-        if has_politics:
-            article += "- Bu gelişme, uluslararası ilişkiler ve küresel siyaset açısından önem taşıyor.\n"
-        if has_health:
-            article += "- Sağlık yetkilileri gelişmeleri yakından takip ediyor.\n"
-        if has_economy:
-            article += "- Gelişme, piyasalar ve ekonomik göstergeler üzerinde etkili olabilir.\n"
+        return self._render_article(ozet_text, detaylar_text, kaynak_text,
+                                    sources, items, best_url)
 
-        article += "\n"
+    # ──────────────────────────────────────────────────────────
+    # CANONICAL RENDERER — ensures every Memos post uses the
+    # exact same structure regardless of generation path.
+    # ──────────────────────────────────────────────────────────
 
-        # Kaynak section — source names with URLs (original language is fine)
-        article += "[Kaynak]\n"
-        seen_urls = set()
-        for i in items[:8]:
-            if i.url not in seen_urls:
-                seen_urls.add(i.url)
-                article += f"- {i.source_name}: {i.url}\n"
-        if best_url and best_url not in seen_urls:
-            article += f"- Kaynak: {best_url}\n"
-
-        # Turkish tags
-        article += "\n#Haber"
-        if p_count >= 2:
-            article += " #DoğrulanmışHaber"
-        article += " #Gündem"
-        if has_tech:
-            article += " #Teknoloji"
-        if has_economy:
-            article += " #Ekonomi"
-        if has_science:
-            article += " #Bilim"
-        if has_politics:
-            article += " #Siyaset"
-
-        return article
+    def _render_article(self, ozet_text: str, detaylar_text: str,
+                        kaynak_text: str, sources: list,
+                        items: list, best_url: str) -> str:
+        """Wrap extracted sections into the canonical Memos format."""
+        parts = ["[Özet]", ozet_text, "", "[Detaylar]", detaylar_text, "",
+                 "[Kaynak]", kaynak_text, "", "#Haber #Gündem"]
+        return "\n".join(parts)
 
     def post_to_memos(self, content: str, tags: str = "") -> Optional[str]:
         """Post content to Memos platform via v1 API.
