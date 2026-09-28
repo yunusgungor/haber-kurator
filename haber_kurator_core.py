@@ -31,7 +31,7 @@ import urllib.parse
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Set, Tuple
-from datetime import datetime
+from datetime import datetime, timezone
 from dataclasses import dataclass, field
 from enum import Enum
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -1313,13 +1313,16 @@ class HaberKuratorCore:
         if not published or not published.strip():
             return True  # no date → keep (better than dropping everything)
 
+        now = datetime.now(timezone.utc)
+
         # Try RFC 2822 (e.g. "Mon, 25 Sep 2026 14:30:00 +0300")
         try:
             dt = datetime.strptime(published[:25], "%a, %d %b %Y %H:%M:%S")
         except (ValueError, IndexError):
             pass
         else:
-            return (datetime.now() - dt).total_seconds() < max_age_hours * 3600
+            # RFC 2822 parsed without tz → assume UTC for comparison
+            return (now - dt.replace(tzinfo=timezone.utc)).total_seconds() < max_age_hours * 3600
 
         # Try ISO-8601 (e.g. "2026-09-25T14:30:00Z" or "2026-09-25T14:30:00+03:00")
         try:
@@ -1327,7 +1330,9 @@ class HaberKuratorCore:
         except (ValueError, TypeError):
             pass
         else:
-            return (datetime.now() - dt).total_seconds() < max_age_hours * 3600
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return (now - dt).total_seconds() < max_age_hours * 3600
 
         # Try Turkish-style (e.g. "25 Eylül 2026 Pazartesi 14:30")
         # Fallback: just check if mentioned year is current year
@@ -3870,8 +3875,12 @@ async def tool_haber_kurator_manager(core: HaberKuratorCore, args: Dict[str, Any
 
         # Run actions
         if action == "update_state":
+            if not slug:
+                return json.dumps({"error": "slug parameter required"})
             return core.update_state(slug, args.get("state"))
         if action == "get_state":
+            if not slug:
+                return json.dumps({"error": "slug parameter required", "state": "unknown", "next_actions": []})
             return json.dumps({
                 "slug": slug, "state": core.get_state(slug),
                 "next_actions": core.get_next_actions(slug),
