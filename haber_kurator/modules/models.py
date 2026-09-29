@@ -245,11 +245,20 @@ def _load_news_sources(json_path: Optional[Path] = None) -> Dict[str, NewsSource
         if env_path:
             json_path = Path(env_path)
         else:
+            # Robust resolution: try relative to plugin root, Hermes home, CWD, etc.
+            _plugin_root = Path(__file__).resolve().parents[2]  # haber_kurator/modules -> haber-kurator/
+            _hermes_home = Path.home() / ".hermes"
             candidates = [
+                _plugin_root / "sources" / "news_sources.json",
+                _hermes_home / "plugins" / "haber-kurator" / "sources" / "news_sources.json",
+                Path.cwd() / "sources" / "news_sources.json",
+                Path.cwd() / ".hermes" / "plugins" / "haber-kurator" / "sources" / "news_sources.json",
                 Path("sources/news_sources.json"),
                 Path(".hermes/plugins/haber-kurator/sources/news_sources.json"),
             ]
             json_path = next((p for p in candidates if p.exists()), None)
+            if json_path is None:
+                logger.warning(f"_load_news_sources: no candidate found among {[str(c) for c in candidates]}")
 
     if json_path and json_path.exists():
         try:
@@ -353,7 +362,6 @@ STATE_TRANSITIONS = {
 
 STATE_ALIAS_MAP = {
     "fact_checking":      "verified",
-    "cross_verified":     "verified",
     "cross_verified":     "verified",
     "correction_needed":  "corrected",
     "corrected":          "corrected",

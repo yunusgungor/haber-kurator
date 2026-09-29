@@ -747,6 +747,61 @@ class TestStatePersistence:
 
 
 # ============================================================
+# TEST 6b: Load idempotency (update-convergence regression)
+# ============================================================
+
+class TestLoadIdempotency:
+    """Regression: instantiating the core (plugin load) must not rewrite
+    run files when nothing changed. PM hashes member dirs for the venv
+    stamp, so a fresh `updated:` timestamp on every load broke update
+    convergence ("Dependency inputs changed while preparing publication;
+    retry" loop between source_completion and the pm worker)."""
+
+    def _seed_run(self, root: Path, slug: str = "2026-05-business-daily") -> Path:
+        run = root / "runs" / "active" / slug
+        run.mkdir(parents=True)
+        (run / "haber-object.md").write_text(
+            "# Haber Nesnesi — test\n\n## Meta\n- **Status:** captured\n"
+            "\nupdated: 2026-01-01T00:00:00\n",
+            encoding="utf-8",
+        )
+        return run
+
+    def _snapshot(self, root: Path) -> dict:
+        snap = {}
+        for p in sorted(root.rglob("*")):
+            if p.is_file() and "__pycache__" not in p.parts:
+                snap[str(p.relative_to(root))] = p.read_bytes()
+        return snap
+
+    def test_repeated_init_writes_nothing(self, tmp_path):
+        self._seed_run(tmp_path)
+        HaberKuratorCore(tmp_path)  # first load settles state (db create, …)
+        steady = self._snapshot(tmp_path)
+        HaberKuratorCore(tmp_path)  # second load must be a pure no-op
+        assert self._snapshot(tmp_path) == steady
+
+    def test_same_state_update_is_noop(self, tmp_path):
+        self._seed_run(tmp_path)
+        core = HaberKuratorCore(tmp_path)
+        obj = tmp_path / "runs" / "active" / "2026-05-business-daily" / "haber-object.md"
+        before = obj.read_bytes()
+        result = core.update_state("2026-05-business-daily", "captured", force=True)
+        assert "✅" in result
+        assert obj.read_bytes() == before
+
+    def test_real_transition_still_writes(self, tmp_path):
+        self._seed_run(tmp_path)
+        core = HaberKuratorCore(tmp_path)
+        obj = tmp_path / "runs" / "active" / "2026-05-business-daily" / "haber-object.md"
+        before = obj.read_bytes()
+        result = core.update_state("2026-05-business-daily", "verified", force=True)
+        assert "✅" in result
+        assert obj.read_bytes() != before
+        assert core.get_state("2026-05-business-daily") == "verified"
+
+
+# ============================================================
 # TEST 7: Writer Agent — News Article Generation & Publishing
 # ============================================================
 

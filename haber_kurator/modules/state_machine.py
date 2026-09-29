@@ -153,6 +153,15 @@ class StateMachineMixin:
         content = obj_path.read_text(encoding="utf-8")
         current_state = self.get_state(slug)
 
+        # Idempotent sync: plugin registration instantiates the core on every
+        # load, and _migrate_old_state() syncs every run. Rewriting a fresh
+        # `updated:` timestamp when nothing changed mutates member files on
+        # every load — PM hashes member dirs for the venv stamp, so this
+        # broke update convergence ("Dependency inputs changed; retry" loop).
+        # A no-op sync must not touch the file, the cache, or the database.
+        if new_state == current_state and "updated:" in content:
+            return f"✅ {slug}: {current_state} (unchanged)"
+
         # Validate transition
         if not force and current_state != "unknown":
             if not self._valid_transition(current_state, new_state):
@@ -215,9 +224,9 @@ class StateMachineMixin:
             return "unknown"
 
         content = obj_path.read_text(encoding="utf-8")
-        st_match = re.search(r"(?i)state:\s*(\w+)", content)
-        if st_match:
-            state = st_match.group(1)
+        m = re.search(r'(?i)(?:status|state)\*{0,2}:\*{0,2}\s*(\w+)', content)
+        if m:
+            state = STATE_ALIAS_MAP.get(m.group(1), m.group(1))
         else:
             state = "captured"
 

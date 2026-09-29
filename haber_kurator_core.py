@@ -122,15 +122,18 @@ class HaberKuratorCore(WriterMixin, ScannerMixin, FetcherMixin, StateMachineMixi
         self.sources = _load_news_sources()
 
         self._init_stores_dirs()
-        self._migrate_old_state()
 
         # State cache — SQLite backed (v3.1.0)
+        # NOTE: must be initialized BEFORE _migrate_old_state(), which calls
+        # sync_state() -> get_state() and therefore touches _state_cache.
         self._state_cache_dir = root / '.state_cache'
         self._state_cache_dir.mkdir(parents=True, exist_ok=True)
         self._state_cache: Dict[str, RunState] = {}
         self._db_path = str(self._state_cache_dir / 'state.db')
         self._init_db()
         self._load_state_cache()
+
+        self._migrate_old_state()
 
         # RSS conditional GET cache (v3.2.0) — per-session, ephemeral
         self._rss_cache: Dict[str, Dict[str, Any]] = {}
